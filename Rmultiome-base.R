@@ -184,35 +184,4 @@ predoubNormObj <- function(samplename,
     return(myobj)
 }
 
-#DoubletFinder path for pK indentification with no "ground truth"
-#the computed value changes.  Serious bug, likely will step away from
-#lzillich path since a third of the time I run this, it gives me a random
-#and totally different number.  E.g, if normally 0.24, I might get 0.005, 0.29...
-#note too sometimes there is a warning which seems to be causing serious issues,
-#but which doesn't fail or give an error, just a warning.  Which means if you run
-# this as part of a pipeline, it will just continue on and hand off to next step.
-predoubpKI <- function(samplename, sweep_PCs = 1:10) {
-  DefaultAssay(samplename)<-"RNA"
-  myobj <- copy(samplename)
-  sweep.res.list_myobj <- paramSweep(myobj, PCs = sweep_PCs, sct = FALSE)
-  sweep.stats_myobj <- summarizeSweep(sweep.res.list_myobj, GT = FALSE)
-  bcmvn_myobj <- find.pK(sweep.stats_myobj)
-  pk.factors <- bcmvn_myobj[which.max(bcmvn_myobj$BCmetric), "pK"]
-  optimal.pk <- as.numeric(as.character(pk.factors))
-  print(paste("Optimal pK value is:", optimal.pk))
-  return(optimal.pk)
-}
 
-## Homotypic Doublet Proportion Estimate
-HDPEobj <- function(samplename, optimal.pk, assumed_doublets = 0.05,
-                    dFPCs = 1:10, dFpN = 0.25) {
-  myobj <- copy(samplename)
-  annotations <- myobj@meta.data$seurat_clusters
-  homotypic.prop <- modelHomotypic(annotations)  
-  nExp_poi <- round(assumed_doublets * nrow(myobj@meta.data))  
-  nExp_poi.adj <- round(nExp_poi * (1 - homotypic.prop))
-  myobj <- doubletFinder(myobj, PCs = dFPCs, pN = dFpN,
-                              pK = optimal.pk, nExp = nExp_poi.adj,
-                              sct = FALSE)
-  return(myobj)
-}
