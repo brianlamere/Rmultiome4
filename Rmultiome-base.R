@@ -13,6 +13,10 @@ library(ggplot2)
 library(data.table)
 library(DoubletFinder)
 library(AnnotationHub)
+library(Matrix)
+library(GenomeInfoDb)
+library(GenomicRanges)
+library(dplyr)
 
 #vignette references:
 # https://stuartlab.org/signac/articles/pbmc_multiomic
