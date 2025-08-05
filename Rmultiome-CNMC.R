@@ -5,26 +5,6 @@ library(BSgenome.Hsapiens.UCSC.hg38)
 
 scratchdir1 = "/path/to/scratch"
 
-#DoubletFinder path with Normalize to ScaleData.
-predoubNormObj <- function(samplename,
-                           FN_dims = 1:10,
-                           umap_dims = 1:10,
-                           FVF_nfeatures = 3000) {
-  #consider adding flag that says SCT version was run and stopping
-  myobj <- copy(samplename)
-  DefaultAssay(myobj) <- "RNA"
-  myobj <- NormalizeData(myobj)
-  myobj <- FindVariableFeatures(myobj, selection.method = "vst",
-                                nfeatures = FVF_nfeatures)
-  myobj <- ScaleData(myobj)
-  myobj <- RunPCA(myobj)
-  myobj <- FindNeighbors(myobj, reduction = "pca", dims = FN_dims)
-  myobj <- FindClusters(myobj, resolution = 0.2)
-  myobj <- RunUMAP(myobj, dims = umap_dims)
-  UMAPPlot(myobj, reduction = "umap")
-  return(myobj)
-}
-
 #DoubletFinder path for pK indentification with no "ground truth"
 predoubpKI <- function(samplename, sweep_PCs = 1:10) {
   DefaultAssay(samplename)<-"RNA"
