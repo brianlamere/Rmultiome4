@@ -1,9 +1,7 @@
 #Functions derived substantially from the following project:
 # https://github.com/lzillich/CN_multiome_cocaine
 
-library(BSgenome.Hsapiens.UCSC.hg38)
-
-scratchdir1 = "/path/to/scratch"
+scratchdir1 = "/your/path/to/scratch"
 
 #DoubletFinder path for pK indentification with no "ground truth"
 predoubpKI <- function(samplename, sweep_PCs = 1:10) {
@@ -33,6 +31,8 @@ HDPEobj <- function(samplename, optimal.pk, assumed_doublets = 0.05,
   return(myobj)
 }
 
+#this comes from CN_multiome_cocaine/2_merge_call_peaks.Rmd largely, with
+#some mods and flow changes, but the individual steps were substantially theirs
 redoPeaks <- function(seuratCombinedObj, sample.list, peakwidthlt = 10000,
                       peakwidthgt = 20, scratchdir = scratchdir1) {
   samples <- sample.list
@@ -43,7 +43,6 @@ redoPeaks <- function(seuratCombinedObj, sample.list, peakwidthlt = 10000,
   }
   # Combine into a GRangesList, unlist, and reduce
   peaks <- reduce(unlist(as(ranges_list, "GRangesList")))
-  #return(peaks)
 
   peakwidths <- width(peaks)
   peaks <- peaks[peakwidths < peakwidthlt & peakwidths > peakwidthgt]
@@ -60,6 +59,8 @@ redoPeaks <- function(seuratCombinedObj, sample.list, peakwidthlt = 10000,
 
   options(future.globals.maxSize = 20000 * 1024^2)
 
+  #the "official" method for using macs3 is to just give seurat the macs3
+  #path and claim it is macs2.
   peaks <- CallPeaks(seuCmb,
                    assay="ATAC",
                    group.by="orig.ident",
