@@ -1,8 +1,7 @@
-#base library for other parts of the toolset
-#copyright under LGPL
-#reference the git repo https://github.com/brianlamere/Rmultiome
-#I sincerely hope others find continued value in anything here for
-# their own projects!  Peace.
+#this is the base toolkit file, has the functions and any operations that have
+#to be done each time.  Note this currently includes loading annotations
+#This file should define how tasks are done, but you shouldn't /do/ them here,
+#unless they will always be done no matter the task.
 
 library(Seurat)
 library(Signac)
@@ -17,24 +16,33 @@ library(Matrix)
 library(GenomeInfoDb)
 library(GenomicRanges)
 library(dplyr)
+library(harmony)
+#library(biomaRt)
+#library(tidyr)
+#library(rtracklayer)
 
-#vignette references:
+#extended library of functions
+source("/your/path/to/opioid-CNMC.R")
+
+# this toolset is primarily based on the use of Seurat. vignette references:
 # https://stuartlab.org/signac/articles/pbmc_multiomic
 # https://satijalab.org/seurat/articles/integration_introduction
+# https://satijalab.org/seurat/articles/seurat5_atacseq_integration_vignette
 # https://satijalab.org/seurat/articles/seurat5_integration_bridge
+# https://satijalab.org/seurat/articles/cell_cycle_vignette.html
 
-#Doublelet section came from here, but it currently gives inconsistent results
-#so will remove unless bug is fixed https://github.com/lzillich/CN_multiome_cocaine
+#guidance from https://github.com/lzillich/CN_multiome_cocaine toolset helped
+#unravel previous code and help me learn why I was hitting a hard matrix size
+#limit.  Some things were substantially taken from them, thus the CNMC file
 
 #same annotations are used for all samples.  I set a default value only so 
-#the function window shows what annotations we're using, modify as needed
+#the function window shows what annotations we're using
 loadannotations <- function(ensdb = EnsDb.Hsapiens.v86) {
   annotation <- GetGRangesFromEnsDb(ensdb = ensdb)
   seqlevels(annotation) <- paste0('chr', seqlevels(annotation))
   return(annotation)
 }
 
-#different method used by lzillich
 loadannotations2 <- function(ensdb = EnsDb.Hsapiens.v86, style = "UCSC") {
   ah <- AnnotationHub()
   ensdbs <- query(ah, c("EnsDb.Hsapiens"))
@@ -48,8 +56,8 @@ loadannotations2 <- function(ensdb = EnsDb.Hsapiens.v86, style = "UCSC") {
 
 #I don't understand why so much is being done to the reference object, but
 #that is what was in my inherited code
-loadreference <- function(reference = "allen_m1c_2019_ssv4.rds") {
-  refpath <- paste("your/path/to/references", reference, sep = "/")
+loadreference <- function(refdir = referencedir, reffile = referencefile) {
+  refpath <- paste(refdir, reffile, sep = "/")
   Reductions(reference)
   reference <- SCTransform(reference, verbose = FALSE)
   reference <- RunPCA(reference, npcs = 50)
@@ -86,8 +94,7 @@ baseobjects <- function(samplename) {
   return(baseSeuratObj)
 }
 
-#this just computes the mean percent of mitochondrial genes in an entire sample
-#My goal was to have a longer comment than characters of code in the section
+#this just computes them mean percent of mitochondrial genes in an entire sample
 meanMT <- function(samplename) {
   return(mean(samplename@meta.data[["percent.mt"]]))
 }
@@ -135,20 +142,20 @@ QCVlnR <- function(samplename) {
 }
 
 #function for trimming samples
-#it is extrodinarily recommend you use QA to come up with your own values.
 trimSample <- function(samplename,
                        nCAlt = 50000, # nCount_RNA is less than this
                        nCAgt = 1000,
                        nCRlt = 6500,
-                       nCRgt = 1000,
-                       #we were using nuclei, which have much lower TSS generally
+                       nCRgt = 100,
+                       #question: if by definition TSS >10 is excellent, why are
+                       #we cutting off at 8?  outliers are one thing...
                        TSSeslt = 8,
                        TSSesgt = 2,
                        nslt = 2.5,
                        nsgt = 0.5,
                        pMTlt = 10) {
   #you can only cut shorter, not longer.  leave the base object alone.  Don't
-  #trim into the object you're trimming
+  #trim into the object you're trimming, else you have to recreate if too short
   myobj <- copy(samplename)
   myobj_trim <- subset(
     x = myobj,
@@ -162,30 +169,140 @@ trimSample <- function(samplename,
       TSS.enrichment < TSSeslt &
       TSS.enrichment > TSSesgt
   )
-  #I would rather use the "command" slot in Seurat object class, but am
-  #concerned that no one else does...?
   oldname <- samplename@project.name
   myobj_trim@project.name <- paste(oldname, "trimmed", sep = "_")
   return(myobj_trim)
 }
 
-#DoubletFinder path with Normalize to ScaleData.
-predoubNormObj <- function(samplename,
+predoubProcObj <- function(samplename,
                            FN_dims = 1:10,
                            umap_dims = 1:10,
                            FVF_nfeatures = 3000) {
-    myobj <- copy(samplename)
-    DefaultAssay(myobj) <- "RNA"
-    myobj <- NormalizeData(myobj)
-    myobj <- FindVariableFeatures(myobj, selection.method = "vst",
-                                      nfeatures = FVF_nfeatures)
-    myobj <- ScaleData(myobj)
-    myobj <- RunPCA(myobj)
-    myobj <- FindNeighbors(myobj, reduction = "pca", dims = FN_dims)
-    myobj <- FindClusters(myobj, resolution = 0.2)
-    myobj <- RunUMAP(myobj, dims = umap_dims)
-    UMAPPlot(myobj, reduction = "umap")
-    return(myobj)
+  myobj <- copy(samplename)
+  DefaultAssay(myobj) <- "RNA"
+  myobj <- NormalizeData(myobj)
+  myobj <- FindVariableFeatures(myobj, selection.method = "vst",
+                                nfeatures = FVF_nfeatures)
+  myobj <- ScaleData(myobj)
+  myobj <- RunPCA(myobj)
+  myobj <- FindNeighbors(myobj, reduction = "pca", dims = FN_dims)
+  myobj <- FindClusters(myobj, resolution = 0.2)
+  myobj <- RunUMAP(myobj, dims = umap_dims)
+  UMAPPlot(myobj, reduction = "umap")
+  return(myobj)
 }
 
+postMergeRNAProcObj <- function(samplename,
+                             FVF_nfeatures = 3000,
+                             RH_dims = 1:20,
+                             FN_dims = 1:20,
+                             umap_dims = 1:20,
+                             FC_reso = 0.2) {
+  myobj <- copy(samplename)
+  DefaultAssay(myobj) <- "RNA"
+  myobj <- NormalizeData(myobj)
+  myobj <- FindVariableFeatures(myobj, selection.method = "vst",
+                                nfeatures = FVF_nfeatures)
+  CellCycleScoring(myobj, s.features = cc.genes.updated.2019$s.genes,
+                   g2m.features = cc.genes.updated.2019$g2m.genes)
+  myobj <- ScaleData(myobj)
+  myobj <- RunPCA(myobj)
+  myobj <- RunHarmony(myobj, group.by.vars = "orig.ident", dims.use = RH_dims,
+                      max.iter.harmony = 50)
+  myobj <- FindNeighbors(myobj, reduction = "harmony", dims = FN_dims)
+  myobj <- FindClusters(myobj, resolution = FC_reso)
+  myobj <- RunUMAP(myobj, reduction = "harmony",
+                   reduction.name = "umap_harmony_RNA", dims = umap_dims)
+  UMAPPlot(myobj, reduction = "umap")
+  return(myobj)
+}
 
+postMergeATACProcObj <- function(samplename, FTFmin.cutoff = 50) {
+  myobj <- copy(samplename)
+  DefaultAssay(myobj) <- "ATAC"
+  myobj <- FindTopFeatures(myobj, min.cutoff = 50)
+  myobj <- RunTFIDF(myobj, method = 1)
+  myobj <- RunSVD(myobj, n = 50)
+  myobj <- RunUMAP(myobj,
+                    reduction = "lsi",
+                    dims = 2:30,
+                    reduction.name = "umap_atac",
+                    reduction.key = "UMAPATAC_")
+  myobj <- ScaleData(myobj)
+  myobj <- RunHarmony(myobj,
+                    group.by.vars = "orig.ident",
+                    reduction.use = "lsi",
+                    dims.use = 2:30,
+                    max.iter.harmony = 50,
+                    assay.use = "ATAC",
+                    reduction.save = "harmony_atac")
+  myobj <- RunUMAP(myobj,
+                    reduction = "harmony_atac",
+                    dims = 1:ncol(Embeddings(myobj,"harmony_atac")),
+                    reduction.name = "umap_harmony_atac",
+                    reduction.key = "UMAPHARMONYATAC_")
+  myobj <- FindMultiModalNeighbors(myobj,
+                    reduction.list = list("harmony",
+                                          "harmony_atac"),
+                    dims.list = list(1:ncol(Embeddings(myobj, "harmony")),
+                                     1:ncol(Embeddings(myobj, "harmony_atac"))),
+                    modality.weight.name = c("RNA.weight","ATAC.weight"),
+                                    verbose = TRUE,prune.SNN=0)
+  myobj <- RunUMAP(myobj,nn.name = "weighted.nn", reduction.name = "umap_int")
+  myobj <- FindClusters(myobj, graph.name = "wsnn", resolution = 0.35)
+}
+
+#this function has many operations that should only be doneto an object once!!!
+predictedObject <- function(samplename5,
+                            my_min.cutoff = 5,
+                            my_npcs = 50,
+                            anchor_dims = 1:50,
+                            prediction_dims = 1:50,
+                            pred.sc.max = 0.5) {
+  #this function does lots of stuff.  Fix this comment.  In original, all the
+  #runs had the same values. Redid with changeable default values.
+  #replaces lines 424-858
+  
+  #now we normalize gene expression data using SCTransform, and reduce
+  # dimenstionality using PCA
+  myobj <- copy(samplename5)
+  DefaultAssay(myobj) <- "RNA"
+  myobj <- SCTransform(myobj)
+  myobj <- RunPCA(myobj, npcs = my_npcs)
+  
+  #process the DNA accessibility assay by performing latent semantic indexing(lsi)
+  DefaultAssay(myobj) <- "ATAC"
+  myobj <- FindTopFeatures(myobj, min.cutoff = my_min.cutoff)
+  myobj <- RunTFIDF(myobj)
+  myobj <- RunSVD(myobj)
+
+  #tbh I'm wanting Sarah to document what her intent was with rest of function  
+  DefaultAssay(myobj) <- "SCT"
+  transfer_anchors <- FindTransferAnchors(
+    reference = reference,
+    query = myobj,
+    normalization.method = "SCT",
+    reference.reduction = "pca",
+    recompute.residuals = FALSE,
+    dims = anchor_dims
+  )
+  
+  predictions <- TransferData(
+    anchorset = transfer_anchors, 
+    refdata = reference$subclass,
+    weight.reduction = myobj[['pca']],
+    dims = prediction_dims
+  )
+
+  myobj <- AddMetaData(
+    object = myobj,
+    metadata = predictions
+  )
+  
+  # set the cell identities to the cell type predictions
+  Idents(myobj) <- "predicted.id"
+  
+  # remove low-quality predictions
+  myobj <- myobj[, myobj$prediction.score.max > pred.sc.max]
+  return(myobj)
+}
