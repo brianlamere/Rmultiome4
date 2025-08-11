@@ -9,7 +9,7 @@ Things which were substantially taken from lzillich I put in the
 Rmultiome-CNMC.R file, after making them functions/etc.  There were
 things I had already done that were pulled from Satijalab or the scientist
 who handed this off to me with some code they had written, those are in the
-Rmultiome-base.R file, along with my own steps and my making this a cleaner
-Process than I had seen.  The intent is that one then starts their own project
-file where they use those the library of functions; I'll make an example of
-that process here in the future.
+Rmultiome-base.R file, along with my own steps and changing the workflow.
+The intent is that one then starts their own project file where they use
+the library of functions; I'll make an example ofthat process here in the 
+future.
