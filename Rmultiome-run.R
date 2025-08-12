@@ -38,9 +38,9 @@ QCVlnR(sample1_trimmed)
 QCDensA(sample1_trimmed)
 
 #prepare objects for further processing
-sample1_pdN <- predoubNormObj(sample1_trimmed)
-sample2_pdN <- predoubNormObj(sample2_trimmed)
-sample3_pdN <- predoubNormObj(sample3_trimmed)
+sample1_pdP <- predoubProcObj(sample1_trimmed)
+sample2_pdP <- predoubProcObj(sample2_trimmed)
+sample3_pdP <- predoubProcObj(sample3_trimmed)
 
 #compute pKI
 sample1_pKI <- predoubpKI(sample1_pdN)
@@ -51,3 +51,17 @@ sample3_pKI <- predoubpKI(sample3_pdN)
 sample1_HDPE <- HDPEobj(sample1_pdN, optimal.pk = sample1_pKI)
 sample2_HDPE <- HDPEobj(sample2_pdN, optimal.pk = sample2_pKI)
 sample3_HDPE <- HDPEobj(sample3_pdN, optimal.pk = sample3_pKI)
+
+#Merge objects
+samplelist <- list(sample1_HDPE, sample2_HDPE, sample3_HDPE)
+seurat <- merge(x = samplelist[[1]], y = samplelist[-1])
+
+seurat2 <- redoPeaks(seurat, samplelist)
+
+seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample1"] <- "sample1"
+seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample2"] <- "sample2"
+seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample3"] <- "sample3"
+
+seurat3 <- postMergeRNAProcObj(seurat2)
+
+seurat4 <- postMergeATACProcObj1(seurat3)
