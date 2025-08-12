@@ -4,10 +4,8 @@
 #example lines.
 
 source("your/path/here/Rmultiome-base.R")
-
-sourcedir = "your/path/here/source"
-h5filename = "filtered_feature_bc_matrix.h5"
-atacfilename = "atac_fragments.tsv.gz"
+#this file is for mostly static settings, such as where files are found
+source("/your/path/here/Rmultiome-settings.R")
 
 #if you're creating base objects, you'll need to load annotations once
 annotations <- loadannotations2()
