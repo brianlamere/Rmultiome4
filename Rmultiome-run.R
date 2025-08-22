@@ -51,9 +51,9 @@ sample2_HDPE <- HDPEobj(sample2_pdN, optimal.pk = sample2_pKI)
 sample3_HDPE <- HDPEobj(sample3_pdN, optimal.pk = sample3_pKI)
 
 #link peaks between RNA and ATAC
-LG05_LP <- linkPeaks(LG05_HDPE)
-LG08_LP <- linkPeaks(LG08_HDPE)
-LG22_LP <- linkPeaks(LG22_HDPE)
+sample1_LP <- linkPeaks(sample1_HDPE)
+sample2_LP <- linkPeaks(sample2_HDPE)
+sample3_LP <- linkPeaks(sample3_HDPE)
 
 #Merge objects
 samplelist <- list(sample1_LP, sample2_LP, sample3_LP)
