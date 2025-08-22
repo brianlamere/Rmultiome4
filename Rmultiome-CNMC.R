@@ -1,8 +1,6 @@
 #Functions derived substantially from the following project:
 # https://github.com/lzillich/CN_multiome_cocaine
 
-scratchdir1 = "/your/path/to/scratch"
-
 #DoubletFinder path for pK indentification with no "ground truth"
 predoubpKI <- function(samplename, sweep_PCs = 1:10) {
   DefaultAssay(samplename)<-"RNA"
@@ -33,60 +31,39 @@ HDPEobj <- function(samplename, optimal.pk, assumed_doublets = 0.05,
 
 #this comes from CN_multiome_cocaine/2_merge_call_peaks.Rmd largely, with
 #some mods and flow changes, but the individual steps were substantially theirs
-redoPeaks <- function(seuratCombinedObj, sample.list, peakwidthlt = 10000,
-                      peakwidthgt = 20, scratchdir = scratchdir1) {
-  samples <- sample.list
-  seuCmb <- copy(seuratCombinedObj)
-  ranges_list <- list()
-  for (i in seq_along(samples)) {
-    ranges_list[[i]] <- samples[[i]]@assays$ATAC@ranges
-  }
-  # Combine into a GRangesList, unlist, and reduce
-  peaks <- reduce(unlist(as(ranges_list, "GRangesList")))
 
-  peakwidths <- width(peaks)
-  peaks <- peaks[peakwidths < peakwidthlt & peakwidths > peakwidthgt]
 
-  counts_atac_merged <- FeatureMatrix(seuCmb@assays$ATAC@fragments,
-                                    features = peaks,
-                                    cells = colnames(seurat))
+postMergeATACProcObj1 <- function(samplename, FTFmin.cutoff = 50) {
+  myobj <- copy(samplename)
+  DefaultAssay(myobj) <- "ATAC"
+  #what is method
+  myobj <- RunTFIDF(myobj, method = 1)
+  myobj <- FindTopFeatures(myobj, min.cutoff = FTFmin.cutoff)
 
-  seuCmb[['ATAC']] <- CreateChromatinAssay(counts_atac_merged,
-                              fragments = seuCmb@assays$ATAC@fragments,
-                              annotation = seuCmb@assays$ATAC@annotation,
-                              sep = c(":","-"),
-                              genome = "hg38")
+  print("Now starting the RunSVD step.")
+  myobj <- RunSVD(myobj, n = 50)
+  print("Now starting the RunUMAP step.")
+  myobj <- RunUMAP(myobj,
+                   reduction = "lsi",
+                   dims = 2:30,
+                   reduction.name = "umap_atac",
+                   reduction.key = "UMAPATAC_")
+  return(myobj)
+}
 
-  options(future.globals.maxSize = 20000 * 1024^2)
-
-  #the "official" method for using macs3 is to just give seurat the macs3
-  #path and claim it is macs2.
-  peaks <- CallPeaks(seuCmb,
-                   assay="ATAC",
-                   group.by="orig.ident",
-                   macs2.path="/usr/bin/macs3",
-                   outdir = scratchdir,
-                   fragment.tempdir = scratchdir)
-
-  counts_atac <- FeatureMatrix(seuCmb@assays$ATAC@fragments,
-                             features = peaks,
-                             cells = colnames(seuCmb))
-
-  seuCmb[["ATAC"]] <- CreateChromatinAssay(counts_atac,
-                            fragments = seuCmb@assays$ATAC@fragments,
-                            annotation = seuCmb@assays$ATAC@annotation,
-                            genome = 'hg38')
-  
-  standard_chroms <- standardChromosomes(BSgenome.Hsapiens.UCSC.hg38)
-  
-  idx_standard_chroms <- 
-    which(as.character(seqnames(granges(seuCmb[["ATAC"]]))) %in% standard_chroms)
-  
-  seuCmb[["ATAC"]] <- 
-    subset(seuCmb[["ATAC"]],
-               features = rownames(seuCmb[["ATAC"]])[idx_standard_chroms])
-  seqlevels(seuCmb[['ATAC']]@ranges) <- 
-    intersect(seqlevels(granges(seuCmb[['ATAC']])),
-              unique(seqnames(granges(seuCmb[['ATAC']]))))
-  return(seuCmb)
+postMergeATACProcObj2 <- function(samplename) {
+  myobj <- copy(samplename)
+  #breaks here, crashes in next step.  "centering and scaling data matrix"
+  #dies with "invalid class "chromatinassay" object:
+  print("Now starting the ScaleData step.")
+  myobj <- ScaleData(myobj, block.size=500)
+  print("Now starting the RunHarmony step.")
+  myobj <- RunHarmony(myobj,
+                      group.by.vars = "orig.ident",
+                      reduction.use = "lsi",
+                      dims.use = 2:30,
+                      max.iter.harmony = 50,
+                      assay.use = "ATAC",
+                      reduction.save = "harmony_atac")
+  return(myobj)
 }
