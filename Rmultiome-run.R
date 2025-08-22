@@ -59,9 +59,9 @@ LG22_LP <- linkPeaks(LG22_HDPE)
 samplelist <- list(sample1_LP, sample2_LP, sample3_LP)
 seurat <- merge(x = samplelist[[1]], y = samplelist[-1])
 
-seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample1"] <- "sample1"
-seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample2"] <- "sample2"
-seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample3"] <- "sample3"
+seurat@meta.data$donor[seurat@meta.data$orig.ident=="sample1"] <- "sample1"
+seurat@meta.data$donor[seurat@meta.data$orig.ident=="sample2"] <- "sample2"
+seurat@meta.data$donor[seurat@meta.data$orig.ident=="sample3"] <- "sample3"
 
 seuratRNA <- postMergeRNAProcObj(seurat)
 
