@@ -50,16 +50,25 @@ sample1_HDPE <- HDPEobj(sample1_pdN, optimal.pk = sample1_pKI)
 sample2_HDPE <- HDPEobj(sample2_pdN, optimal.pk = sample2_pKI)
 sample3_HDPE <- HDPEobj(sample3_pdN, optimal.pk = sample3_pKI)
 
-#Merge objects
-samplelist <- list(sample1_HDPE, sample2_HDPE, sample3_HDPE)
-seurat <- merge(x = samplelist[[1]], y = samplelist[-1])
+#link peaks between RNA and ATAC
+LG05_LP <- linkPeaks(LG05_HDPE)
+LG08_LP <- linkPeaks(LG08_HDPE)
+LG22_LP <- linkPeaks(LG22_HDPE)
 
-seurat2 <- redoPeaks(seurat, samplelist)
+#Merge objects
+samplelist <- list(sample1_LP, sample2_LP, sample3_LP)
+seurat <- merge(x = samplelist[[1]], y = samplelist[-1])
 
 seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample1"] <- "sample1"
 seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample2"] <- "sample2"
 seurat2@meta.data$donor[seurat2@meta.data$orig.ident=="sample3"] <- "sample3"
 
-seurat3 <- postMergeRNAProcObj(seurat2)
+seuratRNA <- postMergeRNAProcObj(seurat)
+
+#broken into subsections during debugging, likely will re-merge later
+seurat2 <- redoPeaks1(seurat, samplelist)
+seurat3 <- redoPeaks2(seurat)
 
 seurat4 <- postMergeATACProcObj1(seurat3)
+#This is where it programmically fails, but it is due to problems in the data in an earlier unknown step
+seurat5 <- postMergeATACProcObj2(seurat4)
