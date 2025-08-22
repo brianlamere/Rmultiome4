@@ -3,6 +3,10 @@
 #This file should define how tasks are done, but you shouldn't /do/ them here,
 #unless they will always be done no matter the task.
 
+#structure motivations:  reduce typos, improve experience for doing QC quickly
+#some obvious improvements not a priority if the level of effort to implement 
+#exceeds the subsequent level of effort saved, short of typo risk mitigation
+
 library(Seurat)
 library(Signac)
 library(EnsDb.Hsapiens.v86)
@@ -15,14 +19,17 @@ library(AnnotationHub)
 library(Matrix)
 library(GenomeInfoDb)
 library(GenomicRanges)
-library(dplyr)
+# library(dplyr)
 library(harmony)
+library(future)
 #library(biomaRt)
 #library(tidyr)
 #library(rtracklayer)
 
 #extended library of functions
-source("/your/path/to/opioid-CNMC.R")
+source("/projects/opioid/opioid-CNMC.R")
+
+#plan("multiprocess", workers = 8)
 
 # this toolset is primarily based on the use of Seurat. vignette references:
 # https://stuartlab.org/signac/articles/pbmc_multiomic
@@ -81,7 +88,7 @@ baseobjects <- function(samplename) {
     counts = atac_counts,
     sep = c(":", "-"),
     fragments = fullatac,
-    annotation = annotations
+    annotation = EnsDbAnnos
   )
   #adding the percentage of mitochondrial genes
   DefaultAssay(baseSeuratObj) <- "RNA"
@@ -145,8 +152,8 @@ QCVlnR <- function(samplename) {
 trimSample <- function(samplename,
                        nCAlt = 50000, # nCount_RNA is less than this
                        nCAgt = 1000,
-                       nCRlt = 6500,
-                       nCRgt = 100,
+                       nCRlt = 20000,
+                       nCRgt = 1000,
                        #question: if by definition TSS >10 is excellent, why are
                        #we cutting off at 8?  outliers are one thing...
                        TSSeslt = 8,
@@ -180,6 +187,7 @@ predoubProcObj <- function(samplename,
                            FVF_nfeatures = 3000) {
   myobj <- copy(samplename)
   DefaultAssay(myobj) <- "RNA"
+  #look https://stuartlab.org/signac/articles/pbmc_multiomic#gene-expression-data-processing and find the variance
   myobj <- NormalizeData(myobj)
   myobj <- FindVariableFeatures(myobj, selection.method = "vst",
                                 nfeatures = FVF_nfeatures)
@@ -188,54 +196,164 @@ predoubProcObj <- function(samplename,
   myobj <- FindNeighbors(myobj, reduction = "pca", dims = FN_dims)
   myobj <- FindClusters(myobj, resolution = 0.2)
   myobj <- RunUMAP(myobj, dims = umap_dims)
-  UMAPPlot(myobj, reduction = "umap")
+  #UMAPPlot(myobj, reduction = "umap")
   return(myobj)
 }
 
 postMergeRNAProcObj <- function(samplename,
-                             FVF_nfeatures = 3000,
-                             RH_dims = 1:20,
-                             FN_dims = 1:20,
-                             umap_dims = 1:20,
-                             FC_reso = 0.2) {
+                                FVF_nfeatures = 3000,
+                                RH_dims = 1:20,
+                                FN_dims = 1:20,
+                                umap_dims = 1:20,
+                                FC_reso = 0.2,
+                                iterations = 100,
+                                numcores = 8) {
   myobj <- copy(samplename)
   DefaultAssay(myobj) <- "RNA"
   myobj <- NormalizeData(myobj)
   myobj <- FindVariableFeatures(myobj, selection.method = "vst",
                                 nfeatures = FVF_nfeatures)
-  CellCycleScoring(myobj, s.features = cc.genes.updated.2019$s.genes,
-                   g2m.features = cc.genes.updated.2019$g2m.genes)
+  myobj <- CellCycleScoring(myobj, s.features = cc.genes.updated.2019$s.genes,
+                            g2m.features = cc.genes.updated.2019$g2m.genes)
   myobj <- ScaleData(myobj)
   myobj <- RunPCA(myobj)
+  #above ends the typical preprocessing/narmalizing for RNA post merge
   myobj <- RunHarmony(myobj, group.by.vars = "orig.ident", dims.use = RH_dims,
-                      max.iter.harmony = 50)
+                      max_iter = iterations, ncores = 8)
   myobj <- FindNeighbors(myobj, reduction = "harmony", dims = FN_dims)
   myobj <- FindClusters(myobj, resolution = FC_reso)
   myobj <- RunUMAP(myobj, reduction = "harmony",
                    reduction.name = "umap_harmony_RNA", dims = umap_dims)
-  UMAPPlot(myobj, reduction = "umap")
+  #UMAPPlot(myobj, reduction = "umap")
   return(myobj)
 }
 
-postMergeATACProcObj <- function(samplename, FTFmin.cutoff = 50) {
+redoPeaks <- function(seuratCombinedObj, sample.list, peakwidthlt = 10000,
+                      peakwidthgt = 20) {
+  samples <- sample.list
+  seuCmb <- copy(seuratCombinedObj)
+  ranges_list <- list()
+  for (i in seq_along(samples)) {
+    ranges_list[[i]] <- samples[[i]]@assays$ATAC@ranges
+  }
+  #print("Starting the standard RunTFIDF, FindTopFeatures, RunSVD steps.")
+  #seuCmb <- RunTFIDF(seuCmb)
+  #seuCmb <- FindTopFeatures(seuCmb, min.cutoff = 'q0')
+  #seuCmb <- RunSVD(seuCmb)
+  print("Now starting the peaks-reduce-GRangesList step.")
+  peaks <- reduce(unlist(as(ranges_list, "GRangesList")))
+  
+  peakwidths <- width(peaks)
+  peaks <- peaks[peakwidths < peakwidthlt & peakwidths > peakwidthgt]
+  
+  print("Now starting the FeatureMatrix step.")
+  counts_atac_merged <- FeatureMatrix(seuCmb@assays$ATAC@fragments,
+                                      features = peaks,
+                                      cells = colnames(seuCmb))
+  
+  seuCmb[['ATAC']] <- CreateChromatinAssay(counts_atac_merged,
+                                           fragments = seuCmb@assays$ATAC@fragments,
+                                           annotation = seuCmb@assays$ATAC@annotation,
+                                           sep = c(":","-"),
+                                           genome = "hg38")
+  return(seuCmb)
+}
+
+linkPeaks <- function(seuratPeaked) {
+  #If you want to link peaks with genes (e.g., using Signac’s LinkPeaks)
+  #this needs to be done before merging.
+  seuPkd <- copy(seuratPeaked)
+  DefaultAssay(seuPkd) <- "RNA"
+  seuPkd <- FindVariableFeatures(seuPkd)
+  #Error in as.vector(x) : no method for coercing this S4 class to a vector
+  DefaultAssay(seuPkd) <- "ATAC"
+  print("starting LinkPeaks.")
+  seuPkd <- RegionStats(
+    object = seuPkd,
+    genome = BSgenome.Hsapiens.UCSC.hg38,
+    assay = "ATAC"
+  )
+  seuPkd <- LinkPeaks(
+    object = seuPkd,
+    peak.assay = "ATAC",
+    expression.assay = "RNA"
+  )
+  return(seuPkd)
+}
+  
+redoPeaks1 <- function(seuratCombinedObj, sample.list, peakwidthlt = 10000,
+                       peakwidthgt = 20) {
+  #this comes from CN_multiome_cocaine/2_merge_call_peaks.Rmd partly, but
+  #their method breaks on various levels so it was substantially restructured
+  samples <- sample.list
+  seuCmb <- copy(seuratCombinedObj)
+  ranges_list <- list()
+  for (i in seq_along(samples)) {
+    ranges_list[[i]] <- samples[[i]]@assays$ATAC@ranges
+  }
+  # Combine into a GRangesList, unlist, and reduce
+  print("Now starting the peaks-reduce-GRangesList step.")
+  peaks <- reduce(unlist(as(ranges_list, "GRangesList")))
+  
+  peakwidths <- width(peaks)
+  peaks <- peaks[peakwidths < peakwidthlt & peakwidths > peakwidthgt]
+  
+  print("Now starting the FeatureMatrix step.")
+  counts_atac_merged <- FeatureMatrix(seuCmb@assays$ATAC@fragments,
+                                      features = peaks,
+                                      cells = colnames(seuCmb))
+  
+  seuCmb[['ATAC']] <- CreateChromatinAssay(counts_atac_merged,
+                                           fragments = seuCmb@assays$ATAC@fragments,
+                                           annotation = seuCmb@assays$ATAC@annotation,
+                                           sep = c(":","-"),
+                                           genome = "hg38")
+  return(seuCmb)
+}
+
+redoPeaks2 <- function(seuratCombinedObj, scratchdir = scratchdir1) {
+  options(future.globals.maxSize = 20000 * 1024^2)
+  
+  #the "official" method for using macs3 is to just give seurat the macs3
+  #path and claim it is macs2.
+  #split this function here, above and below, let's isolate this very long call
+  #there is in theory a way to only do the macs2 peaks once and reuse.
+  seuCmb <- copy(seuratCombinedObj)
+  peaks <- CallPeaks(seuCmb,
+                     assay="ATAC",
+                     group.by="orig.ident",
+                     macs2.path="/usr/bin/macs3",
+                     outdir = scratchdir,
+                     fragment.tempdir = scratchdir,
+                     cleanup = FALSE)
+  
+  counts_atac <- FeatureMatrix(seuCmb@assays$ATAC@fragments,
+                               features = peaks,
+                               cells = colnames(seuCmb))
+  
+  seuCmb[["ATAC"]] <- CreateChromatinAssay(counts_atac,
+                                           fragments = seuCmb@assays$ATAC@fragments,
+                                           annotation = seuCmb@assays$ATAC@annotation,
+                                           genome = 'hg38')
+  
+  standard_chroms <- standardChromosomes(BSgenome.Hsapiens.UCSC.hg38)
+  
+  idx_standard_chroms <- 
+    which(as.character(seqnames(granges(seuCmb[["ATAC"]]))) %in% standard_chroms)
+  
+  seuCmb[["ATAC"]] <- 
+    subset(seuCmb[["ATAC"]],
+           features = rownames(seuCmb[["ATAC"]])[idx_standard_chroms])
+  seqlevels(seuCmb[['ATAC']]@ranges) <- 
+    intersect(seqlevels(granges(seuCmb[['ATAC']])),
+              unique(seqnames(granges(seuCmb[['ATAC']]))))
+  return(seuCmb)
+}
+
+
+
+postMergeATACProcObj3 <- function(samplename) {
   myobj <- copy(samplename)
-  DefaultAssay(myobj) <- "ATAC"
-  myobj <- FindTopFeatures(myobj, min.cutoff = 50)
-  myobj <- RunTFIDF(myobj, method = 1)
-  myobj <- RunSVD(myobj, n = 50)
-  myobj <- RunUMAP(myobj,
-                    reduction = "lsi",
-                    dims = 2:30,
-                    reduction.name = "umap_atac",
-                    reduction.key = "UMAPATAC_")
-  myobj <- ScaleData(myobj)
-  myobj <- RunHarmony(myobj,
-                    group.by.vars = "orig.ident",
-                    reduction.use = "lsi",
-                    dims.use = 2:30,
-                    max.iter.harmony = 50,
-                    assay.use = "ATAC",
-                    reduction.save = "harmony_atac")
   myobj <- RunUMAP(myobj,
                     reduction = "harmony_atac",
                     dims = 1:ncol(Embeddings(myobj,"harmony_atac")),
@@ -250,7 +368,10 @@ postMergeATACProcObj <- function(samplename, FTFmin.cutoff = 50) {
                                     verbose = TRUE,prune.SNN=0)
   myobj <- RunUMAP(myobj,nn.name = "weighted.nn", reduction.name = "umap_int")
   myobj <- FindClusters(myobj, graph.name = "wsnn", resolution = 0.35)
+  return(myobj)
 }
+
+
 
 #this function has many operations that should only be doneto an object once!!!
 predictedObject <- function(samplename5,
