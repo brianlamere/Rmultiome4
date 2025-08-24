@@ -51,6 +51,7 @@ sample2_HDPE <- HDPEobj(sample2_pdN, optimal.pk = sample2_pKI)
 sample3_HDPE <- HDPEobj(sample3_pdN, optimal.pk = sample3_pKI)
 
 #link peaks between RNA and ATAC
+#the below was done in the wrong time, and is part of why I am rebasing the entire code
 sample1_LP <- linkPeaks(sample1_HDPE)
 sample2_LP <- linkPeaks(sample2_HDPE)
 sample3_LP <- linkPeaks(sample3_HDPE)
