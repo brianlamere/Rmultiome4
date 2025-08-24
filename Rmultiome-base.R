@@ -72,29 +72,52 @@ loadreference <- function(refdir = referencedir, reffile = referencefile) {
 }
 
 #function for creating the base objects from which all the raw data comes
-baseobjects <- function(samplename) {
-  #now that we know the middle, we can construct full file names
+baseobjects <- function(samplename, remove_mt = FALSE,
+                        onlyStandardChroms = FALSE) {
+  #setting the remove_mt and onlyStandardChroms to false until RNA mapping
+  #is done, which right now we have gene names but not chromosomes
+  std_chroms <- standardChromosomes(BSgenome.Hsapiens.UCSC.hg38)
   fullrna <- paste(sourcedir, samplename, h5filename, sep = "/")
   fullatac <- paste(sourcedir, samplename, atacfilename, sep = "/")
   counts <- Read10X_h5(filename = fullrna)
   rna_counts <- counts$`Gene Expression`
   atac_counts <- counts$Peaks
+  print("Creating the RNA assay for the Seurat object...")
   baseSeuratObj <- CreateSeuratObject(
     counts = rna_counts,
     assay = "RNA",
     project = samplename
   )
+  print("Adding he ATAC assay for the Seurat object...")
   baseSeuratObj[["ATAC"]] <- CreateChromatinAssay(
     counts = atac_counts,
     sep = c(":", "-"),
     fragments = fullatac,
     annotation = EnsDbAnnos
   )
-  #adding the percentage of mitochondrial genes
+  print("Calculating a slot for percent.mt for downstream QC")
   DefaultAssay(baseSeuratObj) <- "RNA"
   baseSeuratObj[["percent.mt"]] <- PercentageFeatureSet(baseSeuratObj,
                                                         pattern = "^MT-")
-  #these worry me since they become outdated once object is modified
+  #by default we are removing mitochondrial genes from RNA, but we are doing
+  #it *after* calculating the percent.mt, for downstream QC of the cells.
+  #if (remove_mt) {
+  #  print("Removing mitochondrial data from RNA assay.")
+  #  mt_genes <- grep("^MT-", rownames(baseSeuratObj[["RNA"]]), value = TRUE)
+  #  genes_no_mt <- setdiff(rownames(baseSeuratObj[["RNA"]]), mt_genes)
+  #  baseSeuratObj[["RNA"]] <- subset(
+  #    baseSeuratObj[["RNA"]], features = genes_no_mt
+  #  )
+  #}
+  #if (onlyStandardChroms) {
+  #  DefaultAssay(baseSeuratObj) <- "ATAC"
+  #  print("Removing mitochondrial data from ATAC assay.")
+  #  peaks_gr <- granges(baseSeuratObj[["ATAC"]])
+  #  std_peaks <- names(peaks_gr)[
+  #    as.character(seqnames(peaks_gr)) %in% std_chroms]
+  #  baseSeuratObj[["ATAC"]] <- subset(baseSeuratObj[["ATAC"]], features = std_peaks)
+  #}
+  print("Calculating NucleosomeSignal and TSSEnrichment for ATAC data.")
   DefaultAssay(baseSeuratObj) <- "ATAC"
   baseSeuratObj <- NucleosomeSignal(baseSeuratObj)
   baseSeuratObj <- TSSEnrichment(baseSeuratObj)
@@ -350,7 +373,39 @@ redoPeaks2 <- function(seuratCombinedObj, scratchdir = scratchdir1) {
   return(seuCmb)
 }
 
+postMergeATACProcObj1 <- function(samplename, FTFmin.cutoff = 50) {
+  myobj <- copy(samplename)
+  DefaultAssay(myobj) <- "ATAC"
+  #what is method
+  print("Running RunTFIDF and FindTopFeatures")
+  myobj <- RunTFIDF(myobj, method = 1)
+  myobj <- FindTopFeatures(myobj, min.cutoff = FTFmin.cutoff)
+  print("Now starting the RunSVD step.")
+  myobj <- RunSVD(myobj, n = 50)
+  print("Now starting the RunUMAP step.")
+  myobj <- RunUMAP(myobj,
+                   reduction = "lsi",
+                   dims = 2:30,
+                   reduction.name = "umap_atac",
+                   reduction.key = "UMAPATAC_")
+  return(myobj)
+}
 
+postMergeATACProcObj2 <- function(samplename) {
+  myobj <- copy(samplename)
+  print("Now starting the RunHarmony step.")
+  cat("Cells in object: ", length(colnames(myobj)), "\n")
+  cat("Cells in LSI: ", nrow(Embeddings(myobj, "lsi")), "\n")
+  cat("Do they match? ", all(colnames(myobj) == rownames(Embeddings(myobj, "lsi"))), "\n")
+  myobj <- RunHarmony(myobj,
+                      group.by.vars = "orig.ident",
+                      reduction.use = "lsi",
+                      dims.use = 2:30,
+                      max_iter = 50,
+                      assay.use = "ATAC",
+                      reduction.save = "harmony_atac")
+  return(myobj)
+}
 
 postMergeATACProcObj3 <- function(samplename) {
   myobj <- copy(samplename)
