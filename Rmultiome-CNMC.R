@@ -32,7 +32,6 @@ HDPEobj <- function(samplename, optimal.pk, assumed_doublets = 0.05,
 #this comes from CN_multiome_cocaine/2_merge_call_peaks.Rmd largely, with
 #some mods and flow changes, but the individual steps were substantially theirs
 
-
 postMergeATACProcObj1 <- function(samplename, FTFmin.cutoff = 50) {
   myobj <- copy(samplename)
   DefaultAssay(myobj) <- "ATAC"
@@ -53,16 +52,16 @@ postMergeATACProcObj1 <- function(samplename, FTFmin.cutoff = 50) {
 
 postMergeATACProcObj2 <- function(samplename) {
   myobj <- copy(samplename)
-  #breaks here, crashes in next step.  "centering and scaling data matrix"
-  #dies with "invalid class "chromatinassay" object:
-  print("Now starting the ScaleData step.")
-  myobj <- ScaleData(myobj, block.size=500)
+  #despite what happens in https://github.com/lzillich/CN_multiome_cocaine/blob/main/3b_ATAC_RNA_integration.Rmd
+  #apparently you don't want to run scaledata on a ChromatinAssay object.
+  #print("Now starting the ScaleData step.")
+  #myobj <- ScaleData(myobj, block.size=500)
   print("Now starting the RunHarmony step.")
   myobj <- RunHarmony(myobj,
                       group.by.vars = "orig.ident",
                       reduction.use = "lsi",
                       dims.use = 2:30,
-                      max.iter.harmony = 50,
+                      max_iter = 50,
                       assay.use = "ATAC",
                       reduction.save = "harmony_atac")
   return(myobj)
