@@ -1,18 +1,43 @@
 # Rmultiome
 A small tool set that is being designed for 10X multiome data from brain nuclei
 
-THIS IS A WORK IN PROGRESS, THE ATAC DATA INTEGRATION STEP IS NOT FUNCTIONING UNLESS I'VE REMOVED THIS WARNING
+Rebased after learning many of the vignettes that seem to apply, don't really
+for my particular data set (very high depth, brain nuclei, thus very strong 
+batch effects but no need to do things like redoing peaks, etc).
 
-I was running into some serious issues while trying to use the 
-[Satijalab atacseq integration vignette](https://satijalab.org/seurat/articles/seurat5_atacseq_integration_vignette)
-but found a similar project from [lzillich](https://github.com/lzillich/CN_multiome_cocaine)
+A project goal is being able to do most or all of the steps on my local fairly
+substantial PC (192GB RAM, i9-13900k CPU, 8TB nvme raid) and anything that
+might need more than that, I have a x2eidn AWS instance with 512GB RAM.
 
-Things which were substantially taken from lzillich I put in the
-Rmultiome-CNMC.R file, after making them functions/etc.  There were
-things I had already done that were pulled from Satijalab or the scientist
-who handed this off to me with some code they had written, those are in the
-Rmultiome-base.R file, along with my own steps and changing the workflow.
-The intent is that one then starts their own project file where they use
-the library of functions; I'll make an example ofthat process here in the 
-future.  Step 1 - get to Differential Expression Analysis, step 2 - publish
-findings, step 3 - full project run example.
+## Configuration
+
+Project settings are stored in `settings.R`.  
+Edit this file to match your local paths and data files before running any
+scripts.
+
+**Example:**
+```r
+sourcedir <- "/path/to/data"
+h5filename <- "rna_data.h5"
+atacfilename <- "atac_data.h5"
+referencedir <- "/path/to/data"
+referencefile <- "referencefile.rds"
+scratchdir1 <- "/path/to/scratch/dir"
+```
+
+## Configuration
+
+Edit `settings.R` to specify the path to your Cell Ranger output file.
+By default, this is `"filtered_feature_bc_matrix.h5"`, but you may need to
+change this if your file is named differently 
+(e.g., "DonorA_filtered_feature_bc_matrix.h5").
+
+### RDS Milestone Files
+
+Milestone files are saved as `rds/{sample}_{milestone}.rds`.
+This allows you to revert or restart analysis at any stage.
+
+Example:
+- `sampleA_qc.rds`
+- `sampleA_filtered.rds`
+- `sampleA_norm.rds`
