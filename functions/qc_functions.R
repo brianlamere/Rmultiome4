@@ -25,8 +25,8 @@ QCVlnA <- function(samplename) {
   DefaultAssay(samplename) <- "ATAC"
   VPsn2 <- VlnPlot(
     object = samplename,
-    features = c("nCount_ATAC", "nCount_RNA", "TSS.enrichment",
-                 "nucleosome_signal"),
+    features = c("nCount_ATAC", "nCount_RNA", "nFeature_ATAC", "nFeature_RNA",
+                 "TSS.enrichment", "nucleosome_signal"),
     ncol = 4,
     pt.size = 0) 
   print(VPsn2)
