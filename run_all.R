@@ -37,6 +37,10 @@ for (sample in samplelist) {
     saveRDS(trim_obj, get_rds_path(sample, "trimmed"))
   } else if (pipeline1_step == "preRNA") {
     # Normalize, find variable features
+    DefaultAssay(myobj) <- "RNA"
+    myobj <- NormalizeData(myobj)
+    myobj <- FindVariableFeatures(myobj, selection.method = "vst",
+                                  nfeatures = FVF_nfeatures)
   } else if (pipeline1_step == "preATAC") {
     # TF-IDF normalization, find toop features/peaks
   }
@@ -45,7 +49,7 @@ for (sample in samplelist) {
 
 {
   if (pipeline2_step == "merge") {
-    #
+    #seurat <- merge(x = samplelist[[1]], y = samplelist[-1])
   } else if (pipeline2_step == "postRNA") {
     #
   } else if (pipeline2_step == "postATAC") {
