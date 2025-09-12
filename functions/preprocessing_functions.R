@@ -121,3 +121,30 @@ remove_nonstandard_chromosomes <- function(
   return(seurat_obj)
 }
 
+merge_sample_objects <- function(samplelist, suffix = "pipeline1", project_name = "opioid", path_fun = get_rds_path) {
+  # Get file paths for all samples
+  file_paths <- sapply(samplelist, function(sample) path_fun(sample, suffix))
+  
+  # Check file existence before proceeding
+  missing_files <- file_paths[!file.exists(file_paths)]
+  if (length(missing_files) > 0) {
+    stop(sprintf("Missing RDS files for samples: %s", paste(missing_files, collapse=", ")))
+  }
+  
+  # Read sample objects
+  sample_objs <- lapply(file_paths, readRDS)
+  
+  # Merge sample objects
+  merged_seurat <- merge(x = sample_objs[[1]], y = sample_objs[-1])
+  
+  # Optionally store input provenance for traceability
+  merged_seurat@misc$input_provenance <- lapply(sample_objs, function(obj) obj@misc$provenance)
+  
+  # Update merged object provenance
+  merged_seurat <- update_provenance(merged_seurat, "merged_object")
+  
+  # Save merged object
+  saveRDS(merged_seurat, path_fun(project_name, "merge"))
+  
+  invisible(merged_seurat)
+}

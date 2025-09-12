@@ -14,6 +14,8 @@ if (length(missing) > 0) {
 EnsDbAnnos <- loadannotations()
 
 pipeline1_step <- "base"
+continue_pipeline <- TRUE
+
 for (sample in samplelist) {
   # STEP 1: RAW (import)
   if (pipeline1_step == "base") {
@@ -25,6 +27,9 @@ for (sample in samplelist) {
     base_obj <- remove_nonstandard_chromosomes(base_obj)
     base_obj <- update_provenance(base_obj, "raw_import")
     saveRDS(base_obj, get_rds_path(sample, "base"))
+    if (continue_pipeline == TRUE) {
+      pipeline1_step <- "trim"
+    }
   } else if (pipeline1_step == "trim") {
     trim_obj <- readRDS(get_rds_path(sample, "base"))
     print("Calculating NucleosomeSignal and TSSEnrichment for ATAC data.")
@@ -35,21 +40,37 @@ for (sample in samplelist) {
     trim_obj <- trimSample(trim_obj)
     trim_obj <- update_provenance(trim_obj, "trim_data")
     saveRDS(trim_obj, get_rds_path(sample, "trimmed"))
+    if (continue_pipeline == TRUE) {
+      pipeline1_step <- "preRNA"
+    }
   } else if (pipeline1_step == "preRNA") {
     # Normalize, find variable features
-    DefaultAssay(myobj) <- "RNA"
-    myobj <- NormalizeData(myobj)
-    myobj <- FindVariableFeatures(myobj, selection.method = "vst",
-                                  nfeatures = FVF_nfeatures)
+    obj <- readRDS(get_rds_path(sample, "trimmed"))
+    DefaultAssay(obj) <- "RNA"
+    obj <- NormalizeData(obj)
+    obj <- FindVariableFeatures(obj, selection.method = "vst",
+                                nfeatures = FVF_nfeatures)
+    obj <- update_provenance(obj, "pre-merge_rna")
+    saveRDS(obj, get_rds_path(sample, "preRNA"))
+    if (continue_pipeline == TRUE) {
+      pipeline1_step <- "preATAC"
+    }
   } else if (pipeline1_step == "preATAC") {
-    # TF-IDF normalization, find toop features/peaks
+    obj <- readRDS(get_rds_path(sample, "preRNA"))
+    DefaultAssay(obj) <- "ATAC"
+    obj <- RunTFIDF(obj)
+    obj <- FindTopFeatures(obj)
+    obj <- update_provenance(obj, "pre-merge_atac")
+    # Save as pipeline1 to signal completion of pre-merge steps
+    saveRDS(obj, get_rds_path(sample, "pipeline1"))
   }
 }  
 
+pipeline2_step == "stop"
 
 {
   if (pipeline2_step == "merge") {
-    #seurat <- merge(x = samplelist[[1]], y = samplelist[-1])
+    merge_sample_objects(samplelist)
   } else if (pipeline2_step == "postRNA") {
     #
   } else if (pipeline2_step == "postATAC") {

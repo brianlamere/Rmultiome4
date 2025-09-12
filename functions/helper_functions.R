@@ -7,8 +7,9 @@ update_provenance <- function(seurat_obj, milestone, params = NULL) {
                                 intern = TRUE), error=function(e) NA)
   git_tag <- tryCatch(system("git describe --tags --always",
                              intern = TRUE), error=function(e) NA)
-  git_dirty <- tryCatch(length(system("git status --porcelain",
-                                      intern = TRUE)) > 0, error=function(e) NA)
+  git_dirty <- tryCatch({
+    if (length(system("git status --porcelain", intern = TRUE)) > 0) "YES" else "NO"
+  }, error=function(e) NA)
   info <- list(
     step = milestone,
     timestamp = Sys.time(),
