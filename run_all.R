@@ -74,4 +74,38 @@ for (sample in samplelist) {
 
 merged_data <- merge_sample_objects(samplelist)
 
-saveRDS(merged_data, "/projects/opioid/vault/merged")
+saveRDS(merged_data, "/projects/opioid/vault/merged_samples.rds")
+
+merged_data <- readRDS("/projects/opioid/vault/merged_samples.rds")
+
+# Collapse layers to get unified counts and data
+merged_data[["RNA"]] <- JoinLayers(merged_data[["RNA"]])
+#merged_data[["ATAC"]] <- JoinLayers(merged_data[["ATAC"]])
+
+# Get list of layers for ATAC
+atac_layers <- Layers(merged_data[["ATAC"]])
+
+# Extract count matrices from each layer and combine
+counts_list <- lapply(atac_layers, function(lyr) {
+  GetAssayData(merged_data[["ATAC"]], layer = lyr, slot = "counts")
+})
+
+# Combine matrices by columns (cells)
+combined_counts <- do.call(cbind, counts_list)
+
+# Create new ChromatinAssay with the collapsed matrix
+new_atac <- CreateChromatinAssay(counts = combined_counts,
+                                 genome = merged_data[["ATAC"]]@genome)
+merged_data[["ATAC"]] <- new_atac
+
+#post-merge RNA modality
+merged_data <- FindVariableFeatures(merged_data, assay = "RNA")
+print(length(VariableFeatures(merged_data)))
+merged_data <- ScaleData(merged_data, assay = "RNA",
+                         features = VariableFeatures(merged_data))
+merged_data <- RunPCA(merged_data, assay = "RNA",
+                      features = VariableFeatures(merged_data))
+saveRDS(postRNA, "/projects/opioid/vault/postRNA.rds")
+
+#post-merge ATAC modality
+postATAC <- 
