@@ -18,23 +18,26 @@ base_object <- function(samplename) {
   counts <- Read10X_h5(filename = fullrna)
   rna_counts <- counts$`Gene Expression`
   atac_counts <- counts$Peaks
+  
   print("Creating the RNA assay for the Seurat object...")
   baseSeuratObj <- CreateSeuratObject(
     counts = rna_counts,
     assay = "RNA",
     project = samplename
   )
-  print("Adding he ATAC assay for the Seurat object...")
+  
+  print("Adding the ATAC assay for the Seurat object...")
   baseSeuratObj[["ATAC"]] <- CreateChromatinAssay(
     counts = atac_counts,
     sep = c(":", "-"),
     fragments = fullatac,
     annotation = EnsDbAnnos
   )
+  
   print("Calculating a slot for percent.mt for downstream QC")
   DefaultAssay(baseSeuratObj) <- "RNA"
-  baseSeuratObj[["percent.mt"]] <- PercentageFeatureSet(baseSeuratObj,
-                                                        pattern = "^MT-")     
+  baseSeuratObj[["percent.mt"]] <- PercentageFeatureSet(baseSeuratObj, pattern = "^MT-")
+  
   return(baseSeuratObj)
 }
 
