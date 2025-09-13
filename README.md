@@ -37,9 +37,7 @@ Example:
 
 ### External Dependencies
 Usually I like to be able to just have lines that say:
-library("Seurat")
-
-And then move on, without there being version requirements, and assume people 
+library("Seurat") and then move on, without there being version requirements, and assume people 
 use a somewhat recent version.  However, Seurat5 added layers to the SeuratObject,
 and many of the core Seurat tools I need (RunPCA, RunHarmony, etc) don't work
 with those layers.  I honestly don't understand why Seurat5 was even released,
@@ -51,8 +49,10 @@ that in mind, here is the environment I ended up using:
 
 > packageVersion("Seurat")
 [1] ‘4.3.0’
+
 > packageVersion("SeuratObject")
 [1] ‘4.1.3’
+
 > packageVersion("Signac")
 [1] ‘1.11.0’
 
