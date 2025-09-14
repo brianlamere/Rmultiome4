@@ -4,9 +4,9 @@ library(Signac, lib.loc = "/projects/Seurat4")
 library(EnsDb.Hsapiens.v86)
 library(AnnotationFilter)
 library(SeuratDisk)
-library(ggplot2)
+#library(ggplot2)
 library(data.table)
-library(harmony)
+library(harmony, lib.loc = "/projects/Seurat4")
 library(future)
 source("/projects/opioid/Rmultiome/functions/preprocessing_functions.R")
 source("/projects/opioid/Rmultiome/functions/trimming_functions.R")
@@ -24,4 +24,8 @@ if (FALSE) {
   install.packages("/projects/scratch/signac-1.11.0.tar.gz",
                    repos = NULL, type = "source",
                    lib = "/projects/Seurat4")
+  install.packages("/projects/scratch/harmony_1.1.0.tar.gz",
+                   repos = NULL, type = "source",
+                   lib = "/projects/Seurat4")
+  
 }

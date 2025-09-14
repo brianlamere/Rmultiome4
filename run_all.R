@@ -78,34 +78,84 @@ saveRDS(merged_data, "/projects/opioid/vault/merged_samples.rds")
 
 merged_data <- readRDS("/projects/opioid/vault/merged_samples.rds")
 
-# Collapse layers to get unified counts and data
-merged_data[["RNA"]] <- JoinLayers(merged_data[["RNA"]])
-#merged_data[["ATAC"]] <- JoinLayers(merged_data[["ATAC"]])
-
-# Get list of layers for ATAC
-atac_layers <- Layers(merged_data[["ATAC"]])
-
-# Extract count matrices from each layer and combine
-counts_list <- lapply(atac_layers, function(lyr) {
-  GetAssayData(merged_data[["ATAC"]], layer = lyr, slot = "counts")
-})
-
-# Combine matrices by columns (cells)
-combined_counts <- do.call(cbind, counts_list)
-
-# Create new ChromatinAssay with the collapsed matrix
-new_atac <- CreateChromatinAssay(counts = combined_counts,
-                                 genome = merged_data[["ATAC"]]@genome)
-merged_data[["ATAC"]] <- new_atac
-
 #post-merge RNA modality
+DefaultAssay(merged_data) <- "RNA"
 merged_data <- FindVariableFeatures(merged_data, assay = "RNA")
-print(length(VariableFeatures(merged_data)))
 merged_data <- ScaleData(merged_data, assay = "RNA",
                          features = VariableFeatures(merged_data))
 merged_data <- RunPCA(merged_data, assay = "RNA",
                       features = VariableFeatures(merged_data))
-saveRDS(postRNA, "/projects/opioid/vault/postRNA.rds")
+saveRDS(merged_data, "/projects/opioid/vault/postRNA.rds")
 
 #post-merge ATAC modality
-postATAC <- 
+DefaultAssay(merged_data) <- "ATAC"
+merged_data <- RunTFIDF(merged_data)
+merged_data <- FindTopFeatures(merged_data, min.cutoff = 'q0')
+merged_data <- RunSVD(merged_data)
+saveRDS(merged_data, "/projects/opioid/vault/postATAC.rds")
+merged_data <- readRDS("/projects/opioid/vault/postATAC.rds")
+
+#time for harmony
+DefaultAssay(merged_data) <- "RNA"
+merged_data <- RunHarmony(
+  merged_data,
+  group.by.vars = "orig.ident",
+  reduction.use = "pca",
+  max_iter = 50,
+  reduction.save = "harmony"
+)
+
+DefaultAssay(merged_data) <- "ATAC"
+merged_data <- RunHarmony(
+  object = merged_data,
+  group.by.vars = "orig.ident",
+  reduction.use = "lsi",
+  project.dim = FALSE
+)
+
+merged_data <- FindMultiModalNeighbors(
+  object = merged_data,
+  reduction.list = list("pca", "harmony"),
+  dims.list = list(1:50, 1:50)
+)
+
+merged_data <- FindClusters(
+  merged_data,
+  graph.name = "wsnn",
+  algorithm = 3,
+  resolution = 0.7
+)
+
+merged_data <- RunUMAP(
+  merged_data,
+  nn.name = "weighted.nn",
+  reduction.name = "wnn.umap",
+  reduction.key = "wnnUMAP_"
+)
+
+saveRDS(merged_data, "/projects/opioid/vault/pre_mapping.rds")
+
+# unless something above has been changed, the below plot now shows pretty good
+#integration, with donors spread across the umap
+DimPlot(merged_data, reduction = "wnn.umap", group.by = "orig.ident")
+
+#now we need to do the work of mapping cell types so we can then cluster by
+#cell types.
+
+#compare these results to PanglaoDB, CellMarker, etc
+markers <- FindAllMarkers(merged_data, assay = "RNA", only.pos = TRUE)
+top_markers <- markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+print(top_markers)
+
+saveRDS(markers, "/projects/opioid/vault/markers.rds")
+
+library(SeuratDisk)
+SaveH5Seurat(merged_data, filename = "merged_data.h5Seurat")
+Convert("merged_data.h5Seurat", dest = "h5ad")
+
+
+
+#Link peaks to nearby genes, or use motif analysis (e.g. Signac::FindMotifs()) 
+# to infer cell type-specific TFs.
+#atac_markers <- FindAllMarkers(merged_data, assay = "ATAC", only.pos = TRUE)
+
