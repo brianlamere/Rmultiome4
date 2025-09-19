@@ -119,6 +119,7 @@ saveRDS(harmony_obj, "/projects/opioid/vault/pre_mapping_05_40.rds")
 
 premap_obj <- readRDS("/projects/opioid/vault/pre_mapping.rds")
 
+#very out of place QC that shouldn't be here but this is still alpha code
 DefaultAssay(premap_obj) <- "RNA"
 DimPlot(harmony_obj, reduction = "wnn.umap", group.by = "orig.ident", raster = FALSE) +
   ggtitle("Algorith = SLM, Resolution = 0.05")
