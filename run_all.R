@@ -131,6 +131,4 @@ VlnPlot(premap_obj, features = "ST18", group.by = "seurat_clusters", pt.size = 0
 #markers_nonsingleton4 <- target_markers(merged_data4)
 #saveRDS(markers_nonsingleton4, "/projects/opioid/vault/markers4.rds")
 #markers_nonsingleton4 <- readRDS("/projects/opioid/vault/markers4.rds")
-#library(reticulate)
-#use_virtualenv("/home/brian/leidenalg", required = TRUE)
-#py_module_available("leidenalg")
+
