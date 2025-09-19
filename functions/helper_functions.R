@@ -93,3 +93,19 @@ update_trimming_settings <- function(settings_df, sample_name, ...) {
 meanMT <- function(samplename) {
   return(mean(samplename@meta.data[["percent.mt"]], na.rm = TRUE))
 }
+
+findElbow <- function(seurat_obj) {
+  pc_sd <- seurat_obj[["pca"]]@stdev
+  pc_table <- data.frame(PC = 1:length(pc_sd), StandardDeviation = pc_sd)
+  
+  # Custom ElbowPlot with grid
+  ggplot(pc_table, aes(x = PC, y = StandardDeviation)) +
+    geom_point() +
+    geom_line() +
+    theme_minimal() +
+    scale_x_continuous(breaks = 1:length(pc_sd)) +
+    scale_y_continuous(breaks = pretty(pc_sd)) +
+    labs(title = "Elbow Plot of PCs", x = "Principal Component", y = "Standard Deviation") +
+    theme(panel.grid.major = element_line(color = "gray", size = 0.5),
+          panel.grid.minor = element_line(color = "lightgray", size = 0.2))
+}

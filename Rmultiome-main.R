@@ -31,5 +31,5 @@ if (FALSE) {
   install.packages("/projects/scratch/harmony_1.1.0.tar.gz",
                    repos = NULL, type = "source",
                    lib = "/projects/Seurat4")
-  
+  BiocManager::install("HGNChelper")
 }

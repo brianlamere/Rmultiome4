@@ -52,8 +52,10 @@ for (sample in samplelist) {
     kde_obj <- trim_obj
     print("Doing n-Dimensional KDE trimming.")
     kde_obj <- kdeTrimSample(kde_obj,
-                             atac_percentile = 0.95,
-                             rna_percentile = 0.98)
+                             atac_percentile = 0.96,
+                             rna_percentile = 0.96,
+                             combine_method = "intersection" #or "union" if desired
+                             )
     saveRDS(kde_obj, kde_path)
   } else {
     kde_obj <- readRDS(kde_path)
@@ -62,7 +64,7 @@ for (sample in samplelist) {
   # STEP 4: preRNA
   preRNA_path <- get_rds_path(sample, "preRNA")
   if (!file.exists(preRNA_path)) {
-    obj <- trim_obj
+    obj <- kde_obj
     DefaultAssay(obj) <- "RNA"
     obj <- NormalizeData(obj)
     obj <- FindVariableFeatures(obj, selection.method = "vst",
@@ -98,22 +100,33 @@ saveRDS(merged_data, "/projects/opioid/vault/postRNA.rds")
 merged_data <- post_merge_atac(merged_data)
 saveRDS(merged_data, "/projects/opioid/vault/postATAC.rds")
 
+#find the elbow to set dimensionality for Neighbors.
+findElbow(merged_data)
+
 #leaving this here in case you want to restart pre-harmony
 #merged_data <- readRDS("/projects/opioid/vault/postATAC.rds")
 DefaultAssay(merged_data) <- "RNA"
 #time for harmony and FindMultiModalNeighbors
-merged_data <- harmony_FMMN(merged_data, harmony_max_iter = 100)
+harmony_obj <- harmony_FMMN(merged_data, harmony_max_iter = 50,
+                            dims_pca = 1:40, dims_harmony = 1:40)
 
-merged_data <- cluster_data(merged_data, alg = 4, res = 0.5)
+saveRDS(harmony_obj, "/projects/opioid/vault/harmonized40.rds")
 
-#saveRDS(merged_data, "/projects/opioid/vault/pre_mapping.rds")
+harmony_obj <- cluster_data(harmony_obj, alg = 3, res = 0.05, cluster_dims = 1:40)
+
 #adding file name info that corresponds to the resolution used for FindClusters
-saveRDS(merged_data, "/projects/opioid/vault/pre_mapping_4.rds")
+saveRDS(harmony_obj, "/projects/opioid/vault/pre_mapping_05_40.rds")
 
-merged_data4 <- readRDS("/projects/opioid/vault/pre_mapping_4.rds")
+premap_obj <- readRDS("/projects/opioid/vault/pre_mapping.rds")
 
-DimPlot(merged_data4, reduction = "wnn.umap", group.by = "orig.ident") +
-  ggtitle("Algorith = SLM, Resolution = 0.4")
+DefaultAssay(premap_obj) <- "RNA"
+DimPlot(harmony_obj, reduction = "wnn.umap", group.by = "orig.ident", raster = FALSE) +
+  ggtitle("Algorith = SLM, Resolution = 0.05")
+DimPlot(harmony_obj, reduction = "wnn.umap", group.by = "seurat_clusters", raster = FALSE) +
+  ggtitle("Algorith = SLM, Resolution = 0.05")
+
+VlnPlot(premap_obj, features = "ST18", group.by = "seurat_clusters", pt.size = 0) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 #markers_nonsingleton4 <- target_markers(merged_data4)
 #saveRDS(markers_nonsingleton4, "/projects/opioid/vault/markers4.rds")

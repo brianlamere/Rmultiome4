@@ -63,6 +63,13 @@ trimSample <- function(seurat_obj, trimming_settings = NULL) {
   nonzero_gene_names <- rownames(counts)[nonzero_genes]
   trimmed[["RNA"]] <- subset(trimmed[["RNA"]], features = nonzero_gene_names)
   
+  #filter features with zero counts across all cells
+  #DefaultAssay(trimmed) <- "ATAC"
+  #counts <- GetAssayData(trimmed, slot = "counts")
+  #nonzero_peaks <- rowSums(counts) > 0
+  #nonzero_peak_names <- rownames(counts)[nonzero_peaks]
+  #trimmed[["ATAC"]] <- subset(trimmed[["ATAC"]], features = nonzero_peak_names)
+  
   return(trimmed)
 }
 
@@ -122,9 +129,14 @@ kdeTrimSample <- function(seurat_obj,
   # Subset Seurat object
   seurat_obj <- subset(seurat_obj, cells = keep_cells)
   
+  #message about the before and after counts, for sanity.
+  cat(sprintf(
+    "KDE trimming: %d cells before, %d cells after (%.2f%% removed)\n",
+    n_before, n_after, 100 * (n_before - n_after) / n_before
+  ))
   # Optionally, attach pass/fail vectors for record-keeping
-  attr(seurat_obj, "kde_pass_atac") <- pass_atac
-  attr(seurat_obj, "kde_pass_rna")  <- pass_rna
+  #attr(seurat_obj, "kde_pass_atac") <- pass_atac
+  #attr(seurat_obj, "kde_pass_rna")  <- pass_rna
   
   return(seurat_obj)
 }
