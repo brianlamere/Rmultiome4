@@ -30,7 +30,7 @@ for (sample in samplelist) {
     base_obj <- readRDS(base_path)
   }
   
-  # STEP 2: TRIM
+  # STEP 2: 1D TRIM
   trimmed_path <- get_rds_path(sample, "trimmed")
   if (!file.exists(trimmed_path)) {
     trim_obj <- base_obj
@@ -46,7 +46,20 @@ for (sample in samplelist) {
     trim_obj <- readRDS(trimmed_path)
   }
   
-  # STEP 3: preRNA
+  # STEP 3: 2D TRIM
+  kde_path <- get_rds_path(sample, "kdetrim")
+  if (!file.exists(kde_path)) {
+    kde_obj <- trim_obj
+    print("Doing n-Dimensional KDE trimming.")
+    kde_obj <- kdeTrimSample(kde_obj,
+                             atac_percentile = 0.95,
+                             rna_percentile = 0.98)
+    saveRDS(kde_obj, kde_path)
+  } else {
+    kde_obj <- readRDS(kde_path)
+  }
+    
+  # STEP 4: preRNA
   preRNA_path <- get_rds_path(sample, "preRNA")
   if (!file.exists(preRNA_path)) {
     obj <- trim_obj
@@ -60,7 +73,7 @@ for (sample in samplelist) {
     obj <- readRDS(preRNA_path)
   }
   
-  # STEP 4: preATAC/pipeline1
+  # STEP 5: preATAC/pipeline1
   pipeline1_path <- get_rds_path(sample, "pipeline1")
   if (!file.exists(pipeline1_path)) {
     DefaultAssay(obj) <- "ATAC"
@@ -75,87 +88,36 @@ for (sample in samplelist) {
 merged_data <- merge_sample_objects(samplelist)
 
 saveRDS(merged_data, "/projects/opioid/vault/merged_samples.rds")
-
-merged_data <- readRDS("/projects/opioid/vault/merged_samples.rds")
+#merged_data <- readRDS("/projects/opioid/vault/merged_samples.rds")
 
 #post-merge RNA modality
-DefaultAssay(merged_data) <- "RNA"
-merged_data <- FindVariableFeatures(merged_data, assay = "RNA")
-merged_data <- ScaleData(merged_data, assay = "RNA",
-                         features = VariableFeatures(merged_data))
-merged_data <- RunPCA(merged_data, assay = "RNA",
-                      features = VariableFeatures(merged_data))
+merged_data <- post_merge_rna(merged_data)
 saveRDS(merged_data, "/projects/opioid/vault/postRNA.rds")
 
 #post-merge ATAC modality
-DefaultAssay(merged_data) <- "ATAC"
-merged_data <- RunTFIDF(merged_data)
-merged_data <- FindTopFeatures(merged_data, min.cutoff = 'q0')
-merged_data <- RunSVD(merged_data)
+merged_data <- post_merge_atac(merged_data)
 saveRDS(merged_data, "/projects/opioid/vault/postATAC.rds")
-merged_data <- readRDS("/projects/opioid/vault/postATAC.rds")
 
-#time for harmony
+#leaving this here in case you want to restart pre-harmony
+#merged_data <- readRDS("/projects/opioid/vault/postATAC.rds")
 DefaultAssay(merged_data) <- "RNA"
-merged_data <- RunHarmony(
-  merged_data,
-  group.by.vars = "orig.ident",
-  reduction.use = "pca",
-  max_iter = 50,
-  reduction.save = "harmony"
-)
+#time for harmony and FindMultiModalNeighbors
+merged_data <- harmony_FMMN(merged_data, harmony_max_iter = 100)
 
-DefaultAssay(merged_data) <- "ATAC"
-merged_data <- RunHarmony(
-  object = merged_data,
-  group.by.vars = "orig.ident",
-  reduction.use = "lsi",
-  project.dim = FALSE
-)
+merged_data <- cluster_data(merged_data, alg = 4, res = 0.5)
 
-merged_data <- FindMultiModalNeighbors(
-  object = merged_data,
-  reduction.list = list("pca", "harmony"),
-  dims.list = list(1:50, 1:50)
-)
+#saveRDS(merged_data, "/projects/opioid/vault/pre_mapping.rds")
+#adding file name info that corresponds to the resolution used for FindClusters
+saveRDS(merged_data, "/projects/opioid/vault/pre_mapping_4.rds")
 
-merged_data <- FindClusters(
-  merged_data,
-  graph.name = "wsnn",
-  algorithm = 3,
-  resolution = 0.7
-)
+merged_data4 <- readRDS("/projects/opioid/vault/pre_mapping_4.rds")
 
-merged_data <- RunUMAP(
-  merged_data,
-  nn.name = "weighted.nn",
-  reduction.name = "wnn.umap",
-  reduction.key = "wnnUMAP_"
-)
+DimPlot(merged_data4, reduction = "wnn.umap", group.by = "orig.ident") +
+  ggtitle("Algorith = SLM, Resolution = 0.4")
 
-saveRDS(merged_data, "/projects/opioid/vault/pre_mapping.rds")
-
-# unless something above has been changed, the below plot now shows pretty good
-#integration, with donors spread across the umap
-DimPlot(merged_data, reduction = "wnn.umap", group.by = "orig.ident")
-
-#now we need to do the work of mapping cell types so we can then cluster by
-#cell types.
-
-#compare these results to PanglaoDB, CellMarker, etc
-markers <- FindAllMarkers(merged_data, assay = "RNA", only.pos = TRUE)
-top_markers <- markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
-print(top_markers)
-
-saveRDS(markers, "/projects/opioid/vault/markers.rds")
-
-library(SeuratDisk)
-SaveH5Seurat(merged_data, filename = "merged_data.h5Seurat")
-Convert("merged_data.h5Seurat", dest = "h5ad")
-
-
-
-#Link peaks to nearby genes, or use motif analysis (e.g. Signac::FindMotifs()) 
-# to infer cell type-specific TFs.
-#atac_markers <- FindAllMarkers(merged_data, assay = "ATAC", only.pos = TRUE)
-
+#markers_nonsingleton4 <- target_markers(merged_data4)
+#saveRDS(markers_nonsingleton4, "/projects/opioid/vault/markers4.rds")
+#markers_nonsingleton4 <- readRDS("/projects/opioid/vault/markers4.rds")
+#library(reticulate)
+#use_virtualenv("/home/brian/leidenalg", required = TRUE)
+#py_module_available("leidenalg")

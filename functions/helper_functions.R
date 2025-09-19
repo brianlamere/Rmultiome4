@@ -91,5 +91,5 @@ update_trimming_settings <- function(settings_df, sample_name, ...) {
 
 #this just computes them mean percent of mitochondrial genes in an entire sample
 meanMT <- function(samplename) {
-  return(mean(samplename@meta.data[["percent.mt"]]))
+  return(mean(samplename@meta.data[["percent.mt"]], na.rm = TRUE))
 }

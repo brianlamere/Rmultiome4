@@ -26,43 +26,105 @@ trimSample <- function(seurat_obj, trimming_settings = NULL) {
     stop(sprintf("No trimming settings found for sample '%s'.", sample_name))
   }
   # Extract thresholds, with names matching your trimming_settings
-  nCAlt     <- params$nCAlt
-  nCRlt     <- params$nCRlt
-  nCAgt     <- params$nCAgt
-  nCRgt     <- params$nCRgt
-  nslt      <- params$nslt
-  TSSesgt   <- params$TSSesgt
-  
-  # --- Example Trimming Logic ---
-  # (Replace with your actual trimming/filtering code as appropriate)
-  # Here we assume basic filtering on nCount_RNA, nFeature_RNA, etc.
+  max_nCount_ATAC     <- params$max_nCount_ATAC
+  max_nCount_RNA     <- params$max_nCount_RNA
+  min_nCount_ATAC     <- params$min_nCount_ATAC
+  min_nCount_RNA     <- params$min_nCount_RNA
+  max_nss      <- params$max_nss
+  min_nss      <- params$min_nss
+  max_TSS   <- params$max_TSS
+  min_TSS   <- params$min_TSS
+  max_percentMT <- params$max_percentMT
   
   # Ensure required metadata columns exist
-  if (!all(c("nCount_RNA", "nFeature_RNA") %in% colnames(seurat_obj@meta.data))) {
+  if (!all(c("nCount_RNA", "nFeature_RNA", "percent.mt") %in% colnames(seurat_obj@meta.data))) {
     stop("Required metadata columns not found in Seurat object.")
   }
   
-  # Example filtering (customize as needed for your assays and QC metrics)
+  # Cell Filtering (QC)
   trimmed <- subset(
     seurat_obj,
-    subset = nCount_RNA < nCAlt &
-      nCount_RNA > nCAgt &
-      nFeature_RNA < nCRlt &
-      nFeature_RNA > nCRgt
+    subset = nCount_RNA < max_nCount_RNA &
+      nCount_RNA > min_nCount_RNA &
+      nCount_ATAC < max_nCount_ATAC &
+      nCount_ATAC > min_nCount_ATAC &
+      percent.mt < max_percentMT &
+      TSS.enrichment < max_TSS &
+      TSS.enrichment > min_TSS &
+      nucleosome_signal > min_nss &
+      nucleosome_signal < max_nss
     # Add further criteria for nslt, TSSesgt, etc., as needed
   )
   
-  # Optionally, store trimming info in the misc slot for future provenance
-  trimmed@misc$trimming <- list(
-    sample = sample_name,
-    nCAlt = nCAlt,
-    nCRlt = nCRlt,
-    nCAgt = nCAgt,
-    nCRgt = nCRgt,
-    nslt = nslt,
-    TSSesgt = TSSesgt,
-    timestamp = Sys.time()
-  )
+  # filter genes with zero counts across all cells
+  DefaultAssay(trimmed) <- "RNA"
+  counts <- GetAssayData(trimmed, slot = "counts")
+  nonzero_genes <- rowSums(counts) > 0
+  nonzero_gene_names <- rownames(counts)[nonzero_genes]
+  trimmed[["RNA"]] <- subset(trimmed[["RNA"]], features = nonzero_gene_names)
   
   return(trimmed)
+}
+
+get_perc_level <- function(kde, kdepercent) {
+  dz <- sort(as.vector(kde$z), decreasing = TRUE)
+  cumprob <- cumsum(dz) / sum(dz)
+  dz[which(cumprob >= kdepercent)[1]]
+}
+
+get_density_values <- function(x, y, kde) {
+  ix <- findInterval(x, kde$x)
+  iy <- findInterval(y, kde$y)
+  ix <- pmax(pmin(ix, length(kde$x)-1), 1)
+  iy <- pmax(pmin(iy, length(kde$y)-1), 1)
+  sapply(seq_along(x), function(i) kde$z[ix[i], iy[i]])
+}
+
+kdeTrimSample <- function(seurat_obj,
+                          atac_percentile = 0.95,
+                          rna_percentile = 0.95,
+                          combine_method = c("intersection", "union"),
+                          ...) {
+  combine_method <- match.arg(combine_method)
+  df <- seurat_obj@meta.data
+  
+  # For ATAC
+  x_atac <- df$nCount_ATAC
+  y_atac <- df$TSS.enrichment
+  
+  # For RNA
+  x_rna <- df$nCount_RNA
+  y_rna <- df$percent.mt
+  
+  # KDE objects for calculations
+  kde_atac <- kde2d(x_atac, y_atac, n = 100)
+  kde_rna  <- kde2d(x_rna, y_rna, n = 100)
+  
+  # Setting levels
+  level_atac <- get_perc_level(kde_atac, kdepercent = atac_percentile)
+  level_rna  <- get_perc_level(kde_rna, kdepercent = rna_percentile)
+  
+  # Assign density for each cell
+  dens_atac <- get_density_values(x_atac, y_atac, kde_atac)
+  dens_rna  <- get_density_values(x_rna, y_rna, kde_rna)
+  
+  # Which pass the threshold? (≥ level)
+  pass_atac <- dens_atac >= level_atac
+  pass_rna  <- dens_rna  >= level_rna
+  
+  # Combine according to method
+  if (combine_method == "intersection") {
+    keep_cells <- rownames(df)[pass_atac & pass_rna]
+  } else if (combine_method == "union") {
+    keep_cells <- rownames(df)[pass_atac | pass_rna]
+  }
+  
+  # Subset Seurat object
+  seurat_obj <- subset(seurat_obj, cells = keep_cells)
+  
+  # Optionally, attach pass/fail vectors for record-keeping
+  attr(seurat_obj, "kde_pass_atac") <- pass_atac
+  attr(seurat_obj, "kde_pass_rna")  <- pass_rna
+  
+  return(seurat_obj)
 }
