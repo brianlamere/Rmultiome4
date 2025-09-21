@@ -21,9 +21,8 @@ post_merge_atac <- function(pm_atac_obj) {
   pm_atac_obj <- RunSVD(pm_atac_obj)
 }
 
-harmony_FMMN <- function(harmony_obj, harmony_max_iter = 50,
-                         dims_pca = 1:10, dims_harmony = 1:10,
-                         harmony_project.dim = FALSE, knn = 40) {
+harmonize_both <- function(harmony_obj, harmony_max_iter = 50,
+                         harmony_project.dim = FALSE) {
   DefaultAssay(harmony_obj) <- "RNA"
   harmony_obj <- RunHarmony(
     harmony_obj,
@@ -40,25 +39,30 @@ harmony_FMMN <- function(harmony_obj, harmony_max_iter = 50,
     reduction.use = "lsi",
     project.dim = harmony_project.dim
   )
-  harmony_obj <- FindMultiModalNeighbors(
-    object = harmony_obj,
+  return(harmony_obj)
+}
+
+FMMN_task <- function(FMMN_obj, dims_pca = 2:30, dims_harmony = 2:30, knn = 40) {
+  FMMN_obj <- FindMultiModalNeighbors(
+    object = FMMN_obj,
     reduction.list = list("pca", "harmony"),
     k.nn = knn,
     dims.list = list(dims_pca, dims_harmony)
   )
-  return(harmony_obj)
+  return(FMMN_obj)
 }
 
-cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 1:10) {
+cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 2:30) {
   #clustering. change resolution to increase/decrease number of clusters
   DefaultAssay(harmony_obj) <- "RNA"
   harmony_obj <- FindClusters(
     harmony_obj,
     graph.name = "wsnn",
     algorithm = alg,
-    resolution = res
+    resolution = res,
+    group.singletons = FALSE
   )
-  
+
   harmony_obj <- RunUMAP(
     harmony_obj,
     nn.name = "weighted.nn",
@@ -66,6 +70,7 @@ cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 1:10) {
     reduction.key = "wnnUMAP_",
     dims = cluster_dims
   )
+  return(harmony_obj)
 }
 
 target_markers <- function(harmony_obj, numMarks = 5) {

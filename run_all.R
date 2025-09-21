@@ -100,15 +100,20 @@ saveRDS(merged_data, "/projects/opioid/vault/postRNA.rds")
 merged_data <- post_merge_atac(merged_data)
 saveRDS(merged_data, "/projects/opioid/vault/postATAC.rds")
 
-#find the elbow to set dimensionality for Neighbors.
-findElbow(merged_data)
-
 #leaving this here in case you want to restart pre-harmony
 #merged_data <- readRDS("/projects/opioid/vault/postATAC.rds")
 DefaultAssay(merged_data) <- "RNA"
+
+#At this point you stop being production, and move to doing a parameter sweep to
+#find the right settings to use.  You will do most of the rest of these tasks
+#many times if you do it correctly, since you will be using subjective and objective
+#assessments of the different settings, including with cell typing, before moving
+#back to differential analysis.  Don't return here until you know what to put on
+#the next lines for dims, knn, and resolution
+
 #time for harmony and FindMultiModalNeighbors
-harmony_obj <- harmony_FMMN(merged_data, harmony_max_iter = 50,
-                            dims_pca = 1:40, dims_harmony = 1:40)
+harmony_obj <- harmonize_both(merged_data, harmony_max_iter = 50)
+harmony_obj <- FMMN_task(harmony_obj, dims_pca = 2:40, dims_harmony = 2:40, knn = 30)
 
 saveRDS(harmony_obj, "/projects/opioid/vault/harmonized40.rds")
 
@@ -119,7 +124,7 @@ saveRDS(harmony_obj, "/projects/opioid/vault/pre_mapping_05_40.rds")
 
 premap_obj <- readRDS("/projects/opioid/vault/pre_mapping.rds")
 
-#very out of place QC that shouldn't be here but this is still alpha code
+#very out of place QC that shouldn't be here but this is still alpha code/project
 DefaultAssay(premap_obj) <- "RNA"
 DimPlot(harmony_obj, reduction = "wnn.umap", group.by = "orig.ident", raster = FALSE) +
   ggtitle("Algorith = SLM, Resolution = 0.05")
@@ -128,8 +133,3 @@ DimPlot(harmony_obj, reduction = "wnn.umap", group.by = "seurat_clusters", raste
 
 VlnPlot(premap_obj, features = "ST18", group.by = "seurat_clusters", pt.size = 0) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-#markers_nonsingleton4 <- target_markers(merged_data4)
-#saveRDS(markers_nonsingleton4, "/projects/opioid/vault/markers4.rds")
-#markers_nonsingleton4 <- readRDS("/projects/opioid/vault/markers4.rds")
-

@@ -109,3 +109,26 @@ findElbow <- function(seurat_obj) {
     theme(panel.grid.major = element_line(color = "gray", size = 0.5),
           panel.grid.minor = element_line(color = "lightgray", size = 0.2))
 }
+
+# Helper function to summarize results
+summarize_results <- function(results) {
+  # For each result, compute summary metrics
+  metrics <- lapply(results, function(res) {
+    # Example: Use variance of first 20 PCs
+    variance_total <- sum(res$variance[1:20])
+    # Example: Mean jackstraw p-value of first 20 PCs
+    jackstraw_mean <- mean(res$jackstraw[1:20], na.rm = TRUE)
+    # Example: Number of significant PCs (p < 0.05)
+    jackstraw_sig <- sum(res$jackstraw[1:20] < 0.05, na.rm = TRUE)
+    data.frame(
+      variance_total = variance_total,
+      jackstraw_mean = jackstraw_mean,
+      jackstraw_sig = jackstraw_sig,
+      n_clusters = res$n_clusters,
+      n_singletons = res$n_singletons,
+      # Combine parameter columns
+      res$params
+    )
+  })
+  do.call(rbind, metrics)
+}

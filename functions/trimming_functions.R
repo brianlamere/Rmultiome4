@@ -64,11 +64,11 @@ trimSample <- function(seurat_obj, trimming_settings = NULL) {
   trimmed[["RNA"]] <- subset(trimmed[["RNA"]], features = nonzero_gene_names)
   
   #filter features with zero counts across all cells
-  #DefaultAssay(trimmed) <- "ATAC"
-  #counts <- GetAssayData(trimmed, slot = "counts")
-  #nonzero_peaks <- rowSums(counts) > 0
-  #nonzero_peak_names <- rownames(counts)[nonzero_peaks]
-  #trimmed[["ATAC"]] <- subset(trimmed[["ATAC"]], features = nonzero_peak_names)
+  DefaultAssay(trimmed) <- "ATAC"
+  counts <- GetAssayData(trimmed, slot = "counts")
+  nonzero_peaks <- rowSums(counts) > 0
+  nonzero_peak_names <- rownames(counts)[nonzero_peaks]
+  trimmed[["ATAC"]] <- subset(trimmed[["ATAC"]], features = nonzero_peak_names)
   
   return(trimmed)
 }
