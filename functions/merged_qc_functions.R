@@ -60,12 +60,12 @@ write.table(init_df, file="results_debug.csv", sep=",",
             row.names=FALSE, col.names=TRUE)
 
 param_grid <- expand.grid(
-  dims_min = c(1, 2),
-  dims_max = c(10, 20, 35, 50),
-  knn = c(20, 30, 40)
+  dims_min = c(2),
+  dims_max = c(40),
+  knn = c(40)
 )
 
-resolutions <- c(0.05, 0.1, 0.2, 0.4, 0.6, 0.8)
+resolutions <- c(0.06, 0.1)
 
 for (i in 1:nrow(param_grid)) {
   # Set parameters for FMMN

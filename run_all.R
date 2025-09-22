@@ -113,23 +113,54 @@ DefaultAssay(merged_data) <- "RNA"
 
 #time for harmony and FindMultiModalNeighbors
 harmony_obj <- harmonize_both(merged_data, harmony_max_iter = 50)
-harmony_obj <- FMMN_task(harmony_obj, dims_pca = 2:40, dims_harmony = 2:40, knn = 30)
+saveRDS(harmony_obj, "/projects/opioid/vault/harmonized.rds")
 
-saveRDS(harmony_obj, "/projects/opioid/vault/harmonized40.rds")
+rm(harmony_obj)
+rm(premap_obj)
 
-harmony_obj <- cluster_data(harmony_obj, alg = 3, res = 0.05, cluster_dims = 1:40)
+harmony_obj <- FMMN_task(harmony_obj, dims_pca = 2:40, dims_harmony = 2:40, knn = 40)
+premap_obj <- cluster_data(harmony_obj, alg = 3, res = 0.04,
+                           cluster_dims = 2:40, cluster_seed = 1984)
+DimPlot(premap_obj,label=T, raster=FALSE)
 
 #adding file name info that corresponds to the resolution used for FindClusters
-saveRDS(harmony_obj, "/projects/opioid/vault/pre_mapping_05_40.rds")
+saveRDS(premap_obj, "/projects/opioid/vault/pre_mapping_dim240_knn40_res0.04_seed1984.rds")
 
-premap_obj <- readRDS("/projects/opioid/vault/pre_mapping.rds")
+DimPlot(premap_obj,label=T, raster=FALSE)
+#premap_obj <- readRDS("/projects/opioid/vault/pre_mapping_dim240_knn40_res0.05.rds")
 
-#very out of place QC that shouldn't be here but this is still alpha code/project
-DefaultAssay(premap_obj) <- "RNA"
-DimPlot(harmony_obj, reduction = "wnn.umap", group.by = "orig.ident", raster = FALSE) +
-  ggtitle("Algorith = SLM, Resolution = 0.05")
-DimPlot(harmony_obj, reduction = "wnn.umap", group.by = "seurat_clusters", raster = FALSE) +
-  ggtitle("Algorith = SLM, Resolution = 0.05")
+labeled_obj <- premap_obj
+#Note: these assignments are ONLY TRUE if 2:40/40/0.05 is used and only for this data!
+cluster_to_celltype <- c(
+  "0" = "Oligodendrocyte",
+  "1" = "Glutamatergic neurons",
+  "2" = "Astrocyte",
+  "3" = "Microglia",
+  "4" = "GABAergic neurons",
+  "5" = "GABAergic neurons",
+  "6" = "Oligodendrocyte precursor cells",
+  "7" = "Endothelial",
+  "8" = "Mature Neurons",
+  "9" = "Oligodendrocyte",
+  "10" = "Glutamatergic neurons",
+  "11" = "Dopaminergic neurons",
+  "12" = ""
+)
 
-VlnPlot(premap_obj, features = "ST18", group.by = "seurat_clusters", pt.size = 0) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+labeled_obj$celltypes <- cluster_to_celltype[as.character(labeled_obj$seurat_clusters)]
+
+sample_metadata <- data.frame(
+  orig.ident = c("LG300", "LG301", "LG22", "LG25", "LG38", "LG05", "LG26", "LG31", "LG08", "LG23", "LG33"),
+  HIV_status = c("No HIV", "No HIV", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+"),
+  Opioid_exposure = c("Low", "Low", "Low", "Low", "Low", "Acute", "Acute", "Acute", "Chronic", "Chronic", "Chronic")
+)
+
+meta <- labeled_obj@meta.data %>%
+  left_join(sample_metadata, by = "orig.ident")
+
+labeled_obj@meta.data <- meta
+
+#to check
+DimPlot(labeled_obj,label=T, raster=FALSE)
+DimPlot(labeled_obj, group.by = "celltypes", label = TRUE, raster=FALSE)
+table(harmony_240_40_0.05$HIV_status, harmony_240_40_0.05$Opioid_exposure)

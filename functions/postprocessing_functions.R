@@ -73,6 +73,55 @@ cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 2:30) {
   return(harmony_obj)
 }
 
+cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 2:30,
+                         singleton_handling = c("merge", "keep", "discard"),
+                         cluster_seed = 42) {
+  # Match argument for singleton_handling
+  singleton_handling <- match.arg(singleton_handling)
+  
+  DefaultAssay(harmony_obj) <- "RNA"
+  
+  # Determine group.singletons argument for FindClusters
+  if (singleton_handling == "merge") {
+    group_singletons <- TRUE
+  } else {
+    group_singletons <- FALSE
+  }
+  
+  harmony_obj <- FindClusters(
+    harmony_obj,
+    graph.name = "wsnn",
+    algorithm = alg,
+    resolution = res,
+    group.singletons = group_singletons,
+    #I do not like needing the below, but I had subtypes of same type that
+    #had slight instability, that I was merging anyway but would sometimes 
+    #merge on their own, changing my number of clusters thus type assignments
+    random.seed = cluster_seed
+  )
+  
+  # If discarding singletons, subset them out
+  if (singleton_handling == "discard") {
+    if ("singleton" %in% levels(harmony_obj$seurat_clusters)) {
+      singleton_cells <- WhichCells(harmony_obj, idents = "singleton")
+      harmony_obj <- subset(harmony_obj, cells = setdiff(colnames(harmony_obj), singleton_cells))
+      # Drop unused cluster level
+      harmony_obj$seurat_clusters <- droplevels(harmony_obj$seurat_clusters)
+    }
+  }
+  
+  harmony_obj <- RunUMAP(
+    harmony_obj,
+    nn.name = "weighted.nn",
+    reduction.name = "wnn.umap",
+    reduction.key = "wnnUMAP_",
+    dims = cluster_dims
+  )
+  
+  return(harmony_obj)
+}
+
+
 target_markers <- function(harmony_obj, numMarks = 5) {
   DefaultAssay(harmony_obj) <- "RNA"
   cluster_counts <- table(harmony_obj$seurat_clusters)
