@@ -52,34 +52,17 @@ FMMN_task <- function(FMMN_obj, dims_pca = 2:30, dims_harmony = 2:30, knn = 40) 
   return(FMMN_obj)
 }
 
-cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 2:30) {
-  #clustering. change resolution to increase/decrease number of clusters
-  DefaultAssay(harmony_obj) <- "RNA"
-  harmony_obj <- FindClusters(
-    harmony_obj,
-    graph.name = "wsnn",
-    algorithm = alg,
-    resolution = res,
-    group.singletons = FALSE
-  )
-
-  harmony_obj <- RunUMAP(
-    harmony_obj,
-    nn.name = "weighted.nn",
-    reduction.name = "wnn.umap",
-    reduction.key = "wnnUMAP_",
-    dims = cluster_dims
-  )
-  return(harmony_obj)
-}
-
-cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 2:30,
-                         singleton_handling = c("merge", "keep", "discard"),
-                         cluster_seed = 42) {
-  # Match argument for singleton_handling
+cluster_data <- function(
+    harmony_obj, 
+    assay = "RNA", 
+    alg = 3, 
+    res = 0.5, 
+    cluster_dims = 2:30, 
+    singleton_handling = c("merge", "keep", "discard"),
+    cluster_seed = 42
+) {
   singleton_handling <- match.arg(singleton_handling)
-  
-  DefaultAssay(harmony_obj) <- "RNA"
+  DefaultAssay(harmony_obj) <- assay
   
   # Determine group.singletons argument for FindClusters
   if (singleton_handling == "merge") {
@@ -88,9 +71,27 @@ cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 2:30,
     group_singletons <- FALSE
   }
   
+  if (assay == "RNA" || assay == "wsnn") {
+    graph.name <- "wsnn"
+    reduction <- "weighted.nn"
+    reduction.name <- "wnn.umap"
+    reduction.key <- "wnnUMAP_"
+    nn.name <- "weighted.nn"
+  } else if (assay == "ATAC") {
+    graph.name <- "ATAC_snn"  # This assumes you have built this graph with FindNeighbors(reduction = "lsi")
+    reduction <- "lsi"
+    reduction.name <- "atac.umap"
+    reduction.key <- "ATACUMAP_"
+    nn.name <- "ATAC_snn"
+  } else {
+    stop("Unsupported assay for clustering, use RNA or ATAC.")
+  }
+  
+  
+  # Clustering step
   harmony_obj <- FindClusters(
     harmony_obj,
-    graph.name = "wsnn",
+    graph.name = graph.name,
     algorithm = alg,
     resolution = res,
     group.singletons = group_singletons,
@@ -110,12 +111,14 @@ cluster_data <- function(harmony_obj, alg = 3, res = 0.5, cluster_dims = 2:30,
     }
   }
   
+  # UMAP step
   harmony_obj <- RunUMAP(
     harmony_obj,
-    nn.name = "weighted.nn",
-    reduction.name = "wnn.umap",
-    reduction.key = "wnnUMAP_",
-    dims = cluster_dims
+    reduction = reduction,
+    reduction.name = reduction.name,
+    reduction.key = reduction.key,
+    dims = cluster_dims,
+    nn.name = nn.name
   )
   
   return(harmony_obj)

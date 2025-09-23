@@ -56,10 +56,13 @@ for (sample in samplelist) {
     kde_obj <- trim_obj
     print("Doing n-Dimensional KDE trimming.")
     cat("Cells before trimming:", nrow(kde_obj@meta.data), "\n")
+    #percent filters are percent being kept from each
+    #union means all that are kept in at least one of the checks
+    #intersection means only those that are kept in both checks
     kde_obj <- kdeTrimSample(kde_obj,
-                             atac_percentile = 0.90,
-                             rna_percentile = 0.90,
-                             combine_method = "intersection" #or "union" if desired
+                             atac_percentile = 0.95,
+                             rna_percentile = 0.95,
+                             combine_method = "intersection"
                              )
     cat("Cells after KDE trimming:", nrow(kde_obj@meta.data), "\n")
     saveRDS(kde_obj, kde_path)
@@ -94,23 +97,24 @@ for (sample in samplelist) {
   } else {
     print("Files already present for this sample for pipeline1\n")
   }
-  rm(x_atac, y_atac, x_rna, y_rna, dens_atac, dens_rna, pass_atac, pass_rna)
-  gc()
+  #rm(x_atac, y_atac, x_rna, y_rna, dens_atac, dens_rna, pass_atac, pass_rna)
+  gc() #R is obnoxious
   cat(sprintf("Sample %s completed successfully.\n", sample))
 }
 
 merged_data <- merge_sample_objects(samplelist)
 
-saveRDS(merged_data, "/projects/opioid/vault/merged_samples.rds")
+saveRDS(merged_data, "/projects/opioid/vault/merged_samples95.rds")
 #merged_data <- readRDS("/projects/opioid/vault/merged_samples.rds")
 
 #post-merge RNA modality
 merged_data <- post_merge_rna(merged_data)
-saveRDS(merged_data, "/projects/opioid/vault/postRNA.rds")
+#saveRDS(merged_data, "/projects/opioid/vault/postRNA95.rds")
+#merged_data <- readRDS("/projects/opioid/vault/postRNA95.rds")
 
 #post-merge ATAC modality
 merged_data <- post_merge_atac(merged_data)
-saveRDS(merged_data, "/projects/opioid/vault/postATAC.rds")
+saveRDS(merged_data, "/projects/opioid/vault/postATAC95.rds")
 
 #leaving this here in case you want to restart pre-harmony
 #merged_data <- readRDS("/projects/opioid/vault/postATAC.rds")
@@ -127,14 +131,14 @@ DefaultAssay(merged_data) <- "RNA"
 harmony_obj <- harmonize_both(merged_data, harmony_max_iter = 50)
 saveRDS(harmony_obj, "/projects/opioid/vault/harmonized.rds")
 
-#harmony_obj <- readRDS("/projects/opioid/vault/harmonized.rds")
+#harmony_obj <- readRDS("/projects/opioid/vault96/harmonized.rds")
 
 rm(harmony_obj)
 rm(premap_obj)
 rm(labeled_obj)
 
-harmony_obj250_k50 <- FMMN_task(harmony_obj, dims_pca = 2:50, dims_harmony = 2:50, knn = 50)
-premap_obj <- cluster_data(harmony_obj250_k50, alg = 3, res = 0.05,
+harmony_obj250_k50 <- FMMN_task(harmony_obj, dims_pca = 2:40, dims_harmony = 2:40, knn = 40)
+premap_obj <- cluster_data(harmony_obj250_k50, alg = 3, res = 0.04,
                            cluster_dims = 2:50, cluster_seed = 0406)
 DimPlot(premap_obj,label=T, raster=FALSE)
 
@@ -234,7 +238,8 @@ markers <- FindMarkers(
   logfc.threshold = 0
 )
 
-
+# see if problem areas follow a particular sample.
+DimPlot(labeled_obj, split.by = "orig.ident")
 
 markers_oligo_low_acute[order(-markers_oligo_low_acute$p_val_adj), ][1:10, ]
 
