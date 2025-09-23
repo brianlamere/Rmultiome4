@@ -88,8 +88,8 @@ get_density_values <- function(x, y, kde) {
 }
 
 kdeTrimSample <- function(seurat_obj,
-                          atac_percentile = 0.95,
-                          rna_percentile = 0.95,
+                          atac_percentile = 0.75,
+                          rna_percentile = 0.75,
                           combine_method = c("intersection", "union"),
                           ...) {
   combine_method <- match.arg(combine_method)
@@ -102,6 +102,14 @@ kdeTrimSample <- function(seurat_obj,
   # For RNA
   x_rna <- df$nCount_RNA
   y_rna <- df$percent.mt
+  
+  #correlation of metrics
+  corCount <- cor(x_atac, x_rna)
+  corQual <- cor(y_atac, y_rna, use="complete.obs")
+  cat(sprintf(
+    "\nInformational Message:\nData correlation: %f correlation of atac to rna counts,\n %f correlation of TSS.enrichment to percent.mt\n",
+    corCount, corQual
+  ))
   
   # KDE objects for calculations
   kde_atac <- kde2d(x_atac, y_atac, n = 100)
@@ -118,7 +126,21 @@ kdeTrimSample <- function(seurat_obj,
   # Which pass the threshold? (≥ level)
   pass_atac <- dens_atac >= level_atac
   pass_rna  <- dens_rna  >= level_rna
+  top_cells <- pass_atac & pass_rna
   
+  cor_top <- cor(x_atac[top_cells], x_rna[top_cells])
+  cor_top_quality <- cor(y_atac[top_cells], y_rna[top_cells], use="complete.obs")
+  cat(sprintf("\nInformational message:\nCorrelation in KDE-filtered subset: %f (counts), %f (quality)\n", cor_top, cor_top_quality))
+
+  PMTmean_before <- mean(df$percent.mt, na.rm=TRUE)
+  PMTmean_after <- mean(df$percent.mt[pass_atac & pass_rna], na.rm=TRUE)
+  cat(sprintf("Average percent.mt before: %.3f, after KDE filter: %.3f\n", PMTmean_before, PMTmean_after))
+  
+  TSSmean_before <- mean(df$TSS.enrichment, na.rm=TRUE)
+  TSSmean_after <- mean(df$TSS.enrichment[pass_atac & pass_rna], na.rm=TRUE)
+  cat(sprintf("Average TSS.enrichment before: %.3f, after KDE filter: %.3f\n", TSSmean_before, TSSmean_after))
+  
+    
   # Combine according to method
   if (combine_method == "intersection") {
     keep_cells <- rownames(df)[pass_atac & pass_rna]
@@ -130,10 +152,10 @@ kdeTrimSample <- function(seurat_obj,
   seurat_obj <- subset(seurat_obj, cells = keep_cells)
   
   #message about the before and after counts, for sanity.
-  cat(sprintf(
-    "KDE trimming: %d cells before, %d cells after (%.2f%% removed)\n",
-    n_before, n_after, 100 * (n_before - n_after) / n_before
-  ))
+  #cat(sprintf(
+  #  "KDE trimming: %d cells before, %d cells after (%.2f%% removed)\n",
+  #  n_before, n_after, 100 * (n_before - n_after) / n_before
+  #))
   # Optionally, attach pass/fail vectors for record-keeping
   #attr(seurat_obj, "kde_pass_atac") <- pass_atac
   #attr(seurat_obj, "kde_pass_rna")  <- pass_rna

@@ -15,6 +15,7 @@ source("/projects/opioid/Rmultiome/functions/preprocessing_functions.R")
 source("/projects/opioid/Rmultiome/functions/postprocessing_functions.R")
 source("/projects/opioid/Rmultiome/functions/trimming_functions.R")
 source("/projects/opioid/Rmultiome/functions/helper_functions.R")
+source("/projects/opioid/Rmultiome/functions/DE_functions.R")
 
 if (FALSE) {
   #dir.create("/projects/Seurat4", showWarnings = FALSE)

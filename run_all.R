@@ -27,6 +27,7 @@ for (sample in samplelist) {
     base_obj <- update_provenance(base_obj, "raw_import")
     saveRDS(base_obj, base_path)
   } else {
+    print("Reading previous base file from vault\n")
     base_obj <- readRDS(base_path)
   }
   
@@ -43,21 +44,27 @@ for (sample in samplelist) {
     trim_obj <- update_provenance(trim_obj, "trim_data")
     saveRDS(trim_obj, trimmed_path)
   } else {
+    print("Reading previous trim file from vault\n")
     trim_obj <- readRDS(trimmed_path)
   }
   
+  #For filtering, "union" keeps cells if either atac or rna passes, where
+  # "intersection" keeps only those cells that pass both.
   # STEP 3: 2D TRIM
   kde_path <- get_rds_path(sample, "kdetrim")
   if (!file.exists(kde_path)) {
     kde_obj <- trim_obj
     print("Doing n-Dimensional KDE trimming.")
+    cat("Cells before trimming:", nrow(kde_obj@meta.data), "\n")
     kde_obj <- kdeTrimSample(kde_obj,
-                             atac_percentile = 0.96,
-                             rna_percentile = 0.96,
+                             atac_percentile = 0.90,
+                             rna_percentile = 0.90,
                              combine_method = "intersection" #or "union" if desired
                              )
+    cat("Cells after KDE trimming:", nrow(kde_obj@meta.data), "\n")
     saveRDS(kde_obj, kde_path)
   } else {
+    print("Reading previous kdetrim file from vault\n")
     kde_obj <- readRDS(kde_path)
   }
     
@@ -72,6 +79,7 @@ for (sample in samplelist) {
     obj <- update_provenance(obj, "pre-merge_rna")
     saveRDS(obj, preRNA_path)
   } else {
+    print("Reading previous preRNA file from vault\n")
     obj <- readRDS(preRNA_path)
   }
   
@@ -83,7 +91,11 @@ for (sample in samplelist) {
     obj <- FindTopFeatures(obj)
     obj <- update_provenance(obj, "pre-merge_atac")
     saveRDS(obj, pipeline1_path)
+  } else {
+    print("Files already present for this sample for pipeline1\n")
   }
+  rm(x_atac, y_atac, x_rna, y_rna, dens_atac, dens_rna, pass_atac, pass_rna)
+  gc()
   cat(sprintf("Sample %s completed successfully.\n", sample))
 }
 
@@ -115,19 +127,22 @@ DefaultAssay(merged_data) <- "RNA"
 harmony_obj <- harmonize_both(merged_data, harmony_max_iter = 50)
 saveRDS(harmony_obj, "/projects/opioid/vault/harmonized.rds")
 
+#harmony_obj <- readRDS("/projects/opioid/vault/harmonized.rds")
+
 rm(harmony_obj)
 rm(premap_obj)
+rm(labeled_obj)
 
-harmony_obj <- FMMN_task(harmony_obj, dims_pca = 2:40, dims_harmony = 2:40, knn = 40)
-premap_obj <- cluster_data(harmony_obj, alg = 3, res = 0.04,
-                           cluster_dims = 2:40, cluster_seed = 1984)
+harmony_obj250_k50 <- FMMN_task(harmony_obj, dims_pca = 2:50, dims_harmony = 2:50, knn = 50)
+premap_obj <- cluster_data(harmony_obj250_k50, alg = 3, res = 0.05,
+                           cluster_dims = 2:50, cluster_seed = 0406)
 DimPlot(premap_obj,label=T, raster=FALSE)
 
 #adding file name info that corresponds to the resolution used for FindClusters
 saveRDS(premap_obj, "/projects/opioid/vault/pre_mapping_dim240_knn40_res0.04_seed1984.rds")
+premap_obj <- readRDS("/projects/opioid/vault/pre_mapping_dim240_knn40_res0.04_seed1984.rds")
 
 DimPlot(premap_obj,label=T, raster=FALSE)
-#premap_obj <- readRDS("/projects/opioid/vault/pre_mapping_dim240_knn40_res0.05.rds")
 
 labeled_obj <- premap_obj
 #Note: these assignments are ONLY TRUE if 2:40/40/0.05 is used and only for this data!
@@ -141,13 +156,18 @@ cluster_to_celltype <- c(
   "6" = "Oligodendrocyte precursor cells",
   "7" = "Endothelial",
   "8" = "Mature Neurons",
-  "9" = "Oligodendrocyte",
+  "9" = "", # Myelinating Schwann Cells"
   "10" = "Glutamatergic neurons",
   "11" = "Dopaminergic neurons",
-  "12" = ""
+  "12" = "" #Endothelial cells per sctype
 )
 
 labeled_obj$celltypes <- cluster_to_celltype[as.character(labeled_obj$seurat_clusters)]
+
+DimPlot(labeled_obj, group.by = "celltypes", label = TRUE, raster=FALSE)
+
+assigned_cells <- WhichCells(labeled_obj, expression = celltypes != "")
+obj_assigned <- subset(labeled_obj, cells = assigned_cells)
 
 sample_metadata <- data.frame(
   orig.ident = c("LG300", "LG301", "LG22", "LG25", "LG38", "LG05", "LG26", "LG31", "LG08", "LG23", "LG33"),
@@ -155,12 +175,84 @@ sample_metadata <- data.frame(
   Opioid_exposure = c("Low", "Low", "Low", "Low", "Low", "Acute", "Acute", "Acute", "Chronic", "Chronic", "Chronic")
 )
 
-meta <- labeled_obj@meta.data %>%
-  left_join(sample_metadata, by = "orig.ident")
-
-labeled_obj@meta.data <- meta
+# Match HIV status and opioid exposure to each cell via orig.ident
+obj_assigned$HIV_status <- 
+  sample_metadata$HIV_status[match(obj_assigned$orig.ident,
+                                   sample_metadata$orig.ident)]
+obj_assigned$Opioid_exposure <-
+  sample_metadata$Opioid_exposure[match(obj_assigned$orig.ident,
+                                        sample_metadata$orig.ident)]
 
 #to check
 DimPlot(labeled_obj,label=T, raster=FALSE)
-DimPlot(labeled_obj, group.by = "celltypes", label = TRUE, raster=FALSE)
-table(harmony_240_40_0.05$HIV_status, harmony_240_40_0.05$Opioid_exposure)
+DimPlot(obj_assigned, group.by = "celltypes", label = TRUE, raster=FALSE)
+table(obj_assigned$HIV_status, obj_assigned$Opioid_exposure)
+
+obj_assigned$group <- NA
+obj_assigned$group[obj_assigned$orig.ident %in% c("LG300", "LG301")] <- "No_HIV"
+obj_assigned$group[obj_assigned$orig.ident %in% c("LG22", "LG25", "LG38")] <- "Low"
+obj_assigned$group[obj_assigned$orig.ident %in% c("LG05", "LG26", "LG31")] <- "Acute"
+obj_assigned$group[obj_assigned$orig.ident %in% c("LG08", "LG23", "LG33")] <- "Chronic"
+
+oligo <- subset(obj_assigned, subset = celltypes == "Oligodendrocyte")
+micro <- subset(obj_assigned, subset = celltypes == "Microglia")
+astro <- subset(obj_assigned, subset = celltypes == "Astrocyte")
+
+celltypes_list <- c("Oligodendrocyte", "Microglia", "Astrocyte")
+comparisons_list <- list(
+  c("No_HIV", "Low"),
+  c("Low", "Acute"),
+  c("Low", "Chronic")
+)
+
+celltypes_list <- c("Oligodendrocyte")
+comparisons_list <- list(
+  c("No_HIV", "Low")
+)
+
+for (celltype in celltypes_list) {
+  for (comparison in comparisons_list) {
+    #print(paste("For cell type: ", celltype, "first is ", comparison[1], " and second is ", comparison[2]))
+    run_DE_and_export(
+      seurat_obj = obj_assigned,
+      celltype_col = "celltypes",    # Your cell type column name
+      celltype = celltype,
+      group_col = "group",           # Update if your grouping column is named differently
+      ident.1 = comparison[1],
+      ident.2 = comparison[2],
+      output_prefix = "DE_results"
+    )
+  }
+}
+
+markers <- FindMarkers(
+  oligo,
+  ident.1 = "No_HIV",
+  ident.2 = "Low",
+  group.by = "group",
+  min.pct = 0,
+  logfc.threshold = 0
+)
+
+
+
+markers_oligo_low_acute[order(-markers_oligo_low_acute$p_val_adj), ][1:10, ]
+
+cells_of_type <- WhichCells(labeled_obj, expression = celltypes == "Oligodendrocyte")
+expr_matrix <- GetAssayData(labeled_obj, slot = "data")[, cells_of_type]
+
+# Count genes with any expression in this cell type
+sum(rowSums(expr_matrix > 0) > 0) # Number of genes expressed in any Oligodendrocyte cell
+
+cells_group1 <- WhichCells(labeled_obj, expression = group == "Low" & celltypes == "Oligodendrocyte")
+cells_group2 <- WhichCells(labeled_obj, expression = group == "Acute" & celltypes == "Oligodendrocyte")
+
+expr_matrix_group1 <- GetAssayData(labeled_obj, slot = "data")[, cells_group1]
+expr_matrix_group2 <- GetAssayData(labeled_obj, slot = "data")[, cells_group2]
+
+pct_expressing_group1 <- rowMeans(expr_matrix_group1 > 0)
+pct_expressing_group2 <- rowMeans(expr_matrix_group2 > 0)
+
+genes_passing <- sum(pct_expressing_group1 > 0.01 | pct_expressing_group2 > 0.01)
+genes_passing
+
