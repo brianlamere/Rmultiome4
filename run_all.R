@@ -139,12 +139,12 @@ rm(labeled_obj)
 
 harmony_obj250_k50 <- FMMN_task(harmony_obj, dims_pca = 2:40, dims_harmony = 2:40, knn = 40)
 premap_obj <- cluster_data(harmony_obj250_k50, alg = 3, res = 0.04,
-                           cluster_dims = 2:50, cluster_seed = 0406)
+                           cluster_dims = 2:50, cluster_seed = 1984)
 DimPlot(premap_obj,label=T, raster=FALSE)
 
 #adding file name info that corresponds to the resolution used for FindClusters
 saveRDS(premap_obj, "/projects/opioid/vault/pre_mapping_dim240_knn40_res0.04_seed1984.rds")
-premap_obj <- readRDS("/projects/opioid/vault/pre_mapping_dim240_knn40_res0.04_seed1984.rds")
+premap_obj <- readRDS("/projects/opioid/vault96/pre_mapping_dim240_knn40_res0.04_seed1984.rds")
 
 DimPlot(premap_obj,label=T, raster=FALSE)
 
@@ -188,7 +188,7 @@ obj_assigned$Opioid_exposure <-
                                         sample_metadata$orig.ident)]
 
 #to check
-DimPlot(labeled_obj,label=T, raster=FALSE)
+DimPlot(obj_assigned,label=T, raster=FALSE)
 DimPlot(obj_assigned, group.by = "celltypes", label = TRUE, raster=FALSE)
 table(obj_assigned$HIV_status, obj_assigned$Opioid_exposure)
 
@@ -209,11 +209,7 @@ comparisons_list <- list(
   c("Low", "Chronic")
 )
 
-celltypes_list <- c("Oligodendrocyte")
-comparisons_list <- list(
-  c("No_HIV", "Low")
-)
-
+DefaultAssay(obj_assigned) <- "ATAC"
 for (celltype in celltypes_list) {
   for (comparison in comparisons_list) {
     #print(paste("For cell type: ", celltype, "first is ", comparison[1], " and second is ", comparison[2]))
@@ -224,7 +220,7 @@ for (celltype in celltypes_list) {
       group_col = "group",           # Update if your grouping column is named differently
       ident.1 = comparison[1],
       ident.2 = comparison[2],
-      output_prefix = "DE_results"
+      output_prefix = "DA_results"
     )
   }
 }
@@ -239,7 +235,7 @@ markers <- FindMarkers(
 )
 
 # see if problem areas follow a particular sample.
-DimPlot(labeled_obj, split.by = "orig.ident")
+DimPlot(obj_assigned, split.by = "orig.ident", raster = FALSE)
 
 markers_oligo_low_acute[order(-markers_oligo_low_acute$p_val_adj), ][1:10, ]
 
@@ -260,4 +256,20 @@ pct_expressing_group2 <- rowMeans(expr_matrix_group2 > 0)
 
 genes_passing <- sum(pct_expressing_group1 > 0.01 | pct_expressing_group2 > 0.01)
 genes_passing
+
+
+# Assuming your integrated Seurat object is called 'obj_assigned'
+# and your classification is stored in a column named 'customclassif' or similar
+
+# Choose/rename columns to match hers
+meta_df <- obj_assigned@meta.data[, c("orig.ident", "nCount_RNA", "nFeature_RNA",
+                                      "percent.mt","expt", "dose",
+                                      "integrated_snn_res.0.03", "seurat_clusters",
+                                      "customclassif")]
+
+# Drop the "group" column from metadata before export
+meta_df <- obj_assigned@meta.data[, !(colnames(obj_assigned@meta.data) %in% "group")]
+
+# Write to CSV with cell barcodes as the first column (row names)
+write.csv(meta_df, "integrated_opioid.csv", row.names = TRUE)
 

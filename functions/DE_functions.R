@@ -16,7 +16,7 @@ run_DE_and_export <- function(
     ident.1 = ident.1,
     ident.2 = ident.2,
     group.by = group_col,
-    min.pct = 0.01,
+    min.pct = 0.1,
     logfc.threshold = 0.1
   )
   
