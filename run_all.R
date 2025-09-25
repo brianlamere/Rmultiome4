@@ -137,9 +137,9 @@ rm(harmony_obj)
 rm(premap_obj)
 rm(labeled_obj)
 
-harmony_obj250_k50 <- FMMN_task(harmony_obj, dims_pca = 2:40, dims_harmony = 2:40, knn = 40)
-premap_obj <- cluster_data(harmony_obj250_k50, alg = 3, res = 0.04,
-                           cluster_dims = 2:50, cluster_seed = 1984)
+harmony_obj240_k40 <- FMMN_task(harmony_obj, dims_pca = 2:40, dims_harmony = 2:40, knn = 40)
+premap_obj <- cluster_data(harmony_obj240_k40, alg = 3, res = 0.04,
+                           cluster_dims = 2:40, cluster_seed = 1984)
 DimPlot(premap_obj,label=T, raster=FALSE)
 
 #adding file name info that corresponds to the resolution used for FindClusters
@@ -160,7 +160,7 @@ cluster_to_celltype <- c(
   "6" = "Oligodendrocyte precursor cells",
   "7" = "Endothelial",
   "8" = "Mature Neurons",
-  "9" = "", # Myelinating Schwann Cells"
+  "9" = "Unknown", # Myelinating Schwann Cells"
   "10" = "Glutamatergic neurons",
   "11" = "Dopaminergic neurons",
   "12" = "" #Endothelial cells per sctype
@@ -170,27 +170,13 @@ labeled_obj$celltypes <- cluster_to_celltype[as.character(labeled_obj$seurat_clu
 
 DimPlot(labeled_obj, group.by = "celltypes", label = TRUE, raster=FALSE)
 
+#the below filters based on unassigned clusters.  Comment this out to not do that.
 assigned_cells <- WhichCells(labeled_obj, expression = celltypes != "")
 obj_assigned <- subset(labeled_obj, cells = assigned_cells)
-
-sample_metadata <- data.frame(
-  orig.ident = c("LG300", "LG301", "LG22", "LG25", "LG38", "LG05", "LG26", "LG31", "LG08", "LG23", "LG33"),
-  HIV_status = c("No HIV", "No HIV", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+", "HIV+"),
-  Opioid_exposure = c("Low", "Low", "Low", "Low", "Low", "Acute", "Acute", "Acute", "Chronic", "Chronic", "Chronic")
-)
-
-# Match HIV status and opioid exposure to each cell via orig.ident
-obj_assigned$HIV_status <- 
-  sample_metadata$HIV_status[match(obj_assigned$orig.ident,
-                                   sample_metadata$orig.ident)]
-obj_assigned$Opioid_exposure <-
-  sample_metadata$Opioid_exposure[match(obj_assigned$orig.ident,
-                                        sample_metadata$orig.ident)]
 
 #to check
 DimPlot(obj_assigned,label=T, raster=FALSE)
 DimPlot(obj_assigned, group.by = "celltypes", label = TRUE, raster=FALSE)
-table(obj_assigned$HIV_status, obj_assigned$Opioid_exposure)
 
 obj_assigned$group <- NA
 obj_assigned$group[obj_assigned$orig.ident %in% c("LG300", "LG301")] <- "No_HIV"
@@ -198,9 +184,9 @@ obj_assigned$group[obj_assigned$orig.ident %in% c("LG22", "LG25", "LG38")] <- "L
 obj_assigned$group[obj_assigned$orig.ident %in% c("LG05", "LG26", "LG31")] <- "Acute"
 obj_assigned$group[obj_assigned$orig.ident %in% c("LG08", "LG23", "LG33")] <- "Chronic"
 
-oligo <- subset(obj_assigned, subset = celltypes == "Oligodendrocyte")
-micro <- subset(obj_assigned, subset = celltypes == "Microglia")
-astro <- subset(obj_assigned, subset = celltypes == "Astrocyte")
+saveRDS(obj_assigned, "/projects/opioid/vault96/tagged_dim240_knn40_res0.04_seed1984.rds")
+tagged_obj <- obj_assigned
+
 
 celltypes_list <- c("Oligodendrocyte", "Microglia", "Astrocyte")
 comparisons_list <- list(
@@ -209,30 +195,41 @@ comparisons_list <- list(
   c("Low", "Chronic")
 )
 
-DefaultAssay(obj_assigned) <- "ATAC"
+
 for (celltype in celltypes_list) {
   for (comparison in comparisons_list) {
     #print(paste("For cell type: ", celltype, "first is ", comparison[1], " and second is ", comparison[2]))
-    run_DE_and_export(
+    run_DiffExpress_and_export(
       seurat_obj = obj_assigned,
       celltype_col = "celltypes",    # Your cell type column name
       celltype = celltype,
       group_col = "group",           # Update if your grouping column is named differently
       ident.1 = comparison[1],
       ident.2 = comparison[2],
-      output_prefix = "DA_results"
+      output_prefix = "DiffExpress_results"
     )
   }
 }
 
-markers <- FindMarkers(
-  oligo,
-  ident.1 = "No_HIV",
-  ident.2 = "Low",
-  group.by = "group",
-  min.pct = 0,
-  logfc.threshold = 0
-)
+
+for (celltype in celltypes_list) {
+  for (comparison in comparisons_list) {
+    #print(paste("For cell type: ", celltype, "first is ", comparison[1], " and second is ", comparison[2]))
+    run_DiffAccess_and_export(
+      seurat_obj = tagged_obj,
+      celltype_col = "celltypes",    # Your cell type column name
+      celltype = celltype,
+      group_col = "group",           # Update if your grouping column is named differently
+      ident.1 = comparison[1],
+      ident.2 = comparison[2],
+      output_prefix = "DiffAccess_results"
+    )
+  }
+}
+
+##from here below it gets even more string-of-consciousness as things were done
+# in multiple tabs.  Above takes you from raw data to a fully integrated object,
+# then you do DE and DA on the object
 
 # see if problem areas follow a particular sample.
 DimPlot(obj_assigned, split.by = "orig.ident", raster = FALSE)

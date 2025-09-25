@@ -38,6 +38,9 @@ base_object <- function(samplename) {
   DefaultAssay(baseSeuratObj) <- "RNA"
   baseSeuratObj[["percent.mt"]] <- PercentageFeatureSet(baseSeuratObj, pattern = "^MT-")
   
+  baseSeuratObj$orig_barcode <- rownames(baseSeuratObj)
+  rownames(baseSeuratObj) <- paste0(rownames(baseSeuratObj), "_", baseSeuratObj$orig.ident)
+  
   return(baseSeuratObj)
 }
 
