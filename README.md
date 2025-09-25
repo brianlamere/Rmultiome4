@@ -9,6 +9,24 @@ A project goal is being able to do most or all of the steps on my local fairly
 substantial PC (192GB RAM, i9-13900k CPU, 8TB nvme raid) and anything that
 might need more than that, I have a x2eidn AWS instance with 512GB RAM.
 
+# Rmultiome4, as in Seurat4 not v4 of this code.
+
+I am archiving this version, which requires Seurat4, because it does everything
+I need it to do from a pipeline perspective, and I can use it as-is and easily 
+modify settings to tweak and try to improve stability in my plots.  In my current
+data, I have 9 cell types mapped and 7 of them are extremely stable, keeping shape
+and often even location, despite dramatic changes in dim, knn, and resolution.
+There are 2 clusters that are less stable, though they generally keep shape and 
+graph location, they merely sub-cluster based on resolution and knn; I may try to
+change settings earlier in the code to make them more stable.
+
+However, I started with Seurat5 and abandoned it when the examples/vignettes online
+for merged data were all for Seurat4, and often the links were 404/not found.  My
+intention now is to re-attempt to get RunHarmony/etc to work with Seurat5's layers
+that get created when merging multiple samples into one multimodal multisample object,
+so I am archiving this version as Rmultiome4 (for Seurat4) and making Rmultiome a
+Seurat5 project.
+
 ## Configuration
 
 Project settings are stored in `settings.R`.  
