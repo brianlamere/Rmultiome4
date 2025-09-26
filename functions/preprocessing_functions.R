@@ -96,37 +96,6 @@ chromosome_mapping <- function(seurat_obj, rna_annos, warn_threshold = 16000) {
   return(seurat_obj)
 }
 
-
-#' Remove features from RNA and ATAC assays not on standard chromosomes.
-#' Relies on @misc$feature.info$chromosome created by chromosome_mapping().
-#'
-#' @param seurat_obj Seurat object.
-#' @param standard_chroms Chromosomes to keep (default: chr1-22, X, Y).
-#' @return Filtered Seurat object.
-remove_nonstandard_chromosomes <- function(
-    seurat_obj,
-    standard_chroms = paste0("chr", c(1:22, "X", "Y"))
-) {
-  for (assay in c("RNA", "ATAC")) {
-    if (!is.null(seurat_obj[[assay]])) {
-      featinfo <- seurat_obj[[assay]]@misc$feature.info
-      if (!is.null(featinfo) && "chromosome" %in% colnames(featinfo)) {
-        keep <- rownames(featinfo)[featinfo$chromosome %in% standard_chroms]
-        message(sprintf("%s: Keeping %d of %d features on standard chromosomes.", assay, length(keep), nrow(featinfo)))
-        if (length(keep) == 0) {
-          warning(sprintf("No features left in %s after filtering. Skipping subsetting.", assay))
-        } else {
-          seurat_obj[[assay]] <- subset(seurat_obj[[assay]], features = keep)
-          seurat_obj[[assay]]@misc$feature.info <- featinfo[keep, , drop=FALSE]
-        }
-      } else {
-        warning(sprintf("No 'chromosome' column in %s feature.info; skipping filtering for %s.", assay, assay))
-      }
-    }
-  }
-  return(seurat_obj)
-}
-
 merge_sample_objects <- function(samplelist, suffix = "pipeline1", project_name = "opioid", path_fun = get_rds_path) {
   # Get file paths for all samples
   file_paths <- sapply(samplelist, function(sample) path_fun(sample, suffix))
