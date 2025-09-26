@@ -23,7 +23,6 @@ for (sample in samplelist) {
     print("Adding chromosome mapping information to ATAC assay.")
     base_obj <- chromosome_mapping(base_obj, rna_annos = EnsDbAnnos)
     print("Removing non-standard chromosomes from ATAC and RNA.")
-    base_obj <- remove_nonstandard_chromosomes(base_obj)
     base_obj <- update_provenance(base_obj, "raw_import")
     saveRDS(base_obj, base_path)
   } else {
